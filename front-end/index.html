@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StockWise AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<!-- Icon sprite (Lucide, 1.75 stroke) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-dash" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-rupee" viewBox="0 0 24 24"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></symbol>
+    <symbol id="i-compare" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></symbol>
+  </defs>
+</svg>
+
+<a class="skip" href="#main">Skip to main content</a>
+
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="#overview" aria-label="StockWise AI home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>StockWise<b>AI</b></span>
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#overview"><svg class="i"><use href="#i-dash"/></svg><span>Overview</span></a>
+      <a href="#add"><svg class="i"><use href="#i-upload"/></svg><span>Add inventory</span></a>
+      <a href="#health"><svg class="i"><use href="#i-pulse"/></svg><span>Inventory health</span></a>
+      <a href="#plan"><svg class="i"><use href="#i-cart"/></svg><span>Plan purchases</span></a>
+      <a href="#ask"><svg class="i"><use href="#i-chat"/></svg><span>Ask StockWise</span></a>
+    </nav>
+    <div class="side-foot">
+      <div class="ai-status" id="ai-status"><span class="dot"></span><span class="txt">Checking assistant…</span></div>
+      <p>Decision support only. StockWise never places orders.</p>
+    </div>
+  </aside>
+
+  <main id="main">
+    <!-- A: Overview -->
+    <section id="overview" class="section">
+      <header class="page-head">
+        <p id="data-source" class="eyebrow"></p>
+        <h1>Welcome to StockWise AI</h1>
+        <p class="lead">Make better inventory decisions using your stock and sales data.</p>
+      </header>
+
+      <div class="alert" id="risk-alert" role="status" hidden></div>
+
+      <div class="kpis">
+        <div class="kpi"><div class="kpi-top"><span>Products tracked</span><svg class="i"><use href="#i-box"/></svg></div><div class="kpi-num" id="k-total">–</div><p class="kpi-sub">In your current stock list</p></div>
+        <div class="kpi tone-amber"><div class="kpi-top"><span>Need to reorder</span><svg class="i"><use href="#i-repeat"/></svg></div><div class="kpi-num" id="k-reorder">–</div><p class="kpi-sub">At or below their order point</p></div>
+        <div class="kpi tone-red"><div class="kpi-top"><span>May run out soon</span><svg class="i"><use href="#i-alert"/></svg></div><div class="kpi-num" id="k-risk">–</div>
+          <a href="#health" class="kpi-link" id="see-risk">See which products <svg class="i"><use href="#i-arrow"/></svg></a></div>
+        <div class="kpi"><div class="kpi-top"><span>Estimated purchase cost</span><svg class="i"><use href="#i-rupee"/></svg></div><div class="kpi-num" id="k-cost">–</div><p class="kpi-sub">To refill everything that needs it</p></div>
+      </div>
+
+      <div class="card runway-card">
+        <div class="card-head">
+          <div><h2 class="h-card">Stock runway</h2><p class="muted">How long urgent products will last compared with when new stock arrives.</p></div>
+          <div class="legend" aria-hidden="true"><span><i class="lg-stock"></i>Stock lasts</span><span><i class="lg-gap"></i>Nothing to sell</span><span><i class="lg-truck"></i>Delivery arrives</span></div>
+        </div>
+        <div id="chart-urgent" class="runway"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card"><h2 class="h-card">Products by stock condition</h2><div id="chart-status" class="bars"></div></div>
+        <div class="card"><h2 class="h-card">Estimated purchase cost by category</h2><div id="chart-category" class="bars"></div></div>
+      </div>
+    </section>
+
+    <!-- B: Add inventory -->
+    <section id="add" class="section">
+      <header class="sec-head"><h2>Add your inventory</h2><p class="muted">Upload a spreadsheet or simply describe your stock in your own words.</p></header>
+      <div class="grid-2">
+        <div class="card">
+          <div class="opt-head"><span class="opt-icon"><svg class="i"><use href="#i-file"/></svg></span><div><h3>Upload a file</h3><p class="muted">Upload your inventory spreadsheet (CSV).</p></div></div>
+          <label class="drop"><input type="file" id="file-input" accept=".csv,text/csv"><svg class="i lg"><use href="#i-upload"/></svg><span id="file-label">Choose a CSV file</span><small>or drop it here</small></label>
+          <div class="actions">
+            <button class="btn" id="btn-upload">Upload file</button>
+            <a class="btn quiet" href="/api/sample.csv"><svg class="i"><use href="#i-download"/></svg>Sample file</a>
+            <button class="btn quiet" id="btn-sample">Use demo data</button>
+          </div>
+          <p class="help">Needed columns: product_name, current_stock, avg_daily_demand, lead_time_days, unit_cost. Optional: sku, category, supplier, safety_stock, demand_std, incoming_stock, backorders.</p>
+        </div>
+        <div class="card">
+          <div class="opt-head"><span class="opt-icon"><svg class="i"><use href="#i-spark"/></svg></span><div><h3>Describe your stock</h3><p class="muted">Tell us about your products. We'll turn it into a table you can check.</p></div></div>
+          <label for="nl-text" class="sr-only">Describe your stock</label>
+          <textarea id="nl-text" rows="5" placeholder="We have 20 units of Product A, sell around 10 per day, and our supplier takes five days to deliver. Each unit costs ₹100."></textarea>
+          <div class="actions"><button class="btn" id="btn-parse">Check my inventory</button></div>
+          <p class="ai-off note" hidden>AI questions are unavailable until the assistant is connected.</p>
+        </div>
+      </div>
+      <div id="preview" class="card preview" hidden>
+        <h3>Check these details before saving</h3>
+        <p class="muted">Edit anything that looks wrong. Boxes outlined in red are required. Nothing is saved until you choose <b>Save to my inventory</b>.</p>
+        <div class="table-wrap"><table id="preview-table"></table></div>
+        <label class="check"><input type="checkbox" id="accept-buffer" checked><span>If no extra buffer is given, keep a safety buffer of 2 days of sales (our standard assumption).</span></label>
+        <div class="actions"><button class="btn" id="btn-confirm">Save to my inventory</button><button class="btn quiet" id="btn-cancel">Cancel</button></div>
+      </div>
+      <div id="add-msg" class="msg" role="status" hidden></div>
+    </section>
+
+    <!-- C: Health -->
+    <section id="health" class="section">
+      <header class="sec-head"><h2>Inventory health</h2><p class="muted">Every product, most urgent first. Choose “Why this action?” on any row to see the reasoning and the calculation.</p></header>
+      <div class="filters" id="filters" role="toolbar" aria-label="Filter by stock status"></div>
+      <div class="table-wrap card flush"><table id="health-table"></table></div>
+    </section>
+
+    <!-- D: Plan purchases -->
+    <section id="plan" class="section">
+      <header class="sec-head"><h2>Plan your purchases</h2><p class="muted">We fund the most urgent products first and never go over your budget.</p></header>
+      <div class="card budget-card">
+        <label for="budget" class="big-label">How much can you spend on new stock?</label>
+        <div class="budget-row">
+          <div class="money"><span>₹</span><input type="number" id="budget" min="0" step="500" value="25000" inputmode="numeric"></div>
+          <button class="btn" id="btn-plan">Create purchase plan</button>
+        </div>
+      </div>
+
+      <div id="plan-out" hidden>
+        <div class="kpis">
+          <div class="kpi"><div class="kpi-top"><span>Planned spending</span></div><div class="kpi-num" id="p-spend"></div></div>
+          <div class="kpi tone-green"><div class="kpi-top"><span>Budget remaining</span></div><div class="kpi-num" id="p-left"></div></div>
+          <div class="kpi tone-green"><div class="kpi-top"><span>Products fully covered</span></div><div class="kpi-num" id="p-covered"></div></div>
+          <div class="kpi tone-amber"><div class="kpi-top"><span>Still needing stock</span></div><div class="kpi-num" id="p-short"></div></div>
+        </div>
+        <div class="card"><h2 class="h-card">Spending budget vs. planned purchases</h2><div id="chart-budget" class="bars"></div></div>
+        <p id="plan-explain" class="callout"></p>
+        <div class="table-wrap card flush"><table id="plan-table"></table></div>
+        <div class="plan-foot">
+          <p class="help" id="plan-method"></p>
+          <a class="btn quiet" id="btn-export" href="/api/export"><svg class="i"><use href="#i-download"/></svg>Download purchase plan (CSV)</a>
+        </div>
+      </div>
+
+      <div class="card whatif">
+        <div class="opt-head"><span class="opt-icon"><svg class="i"><use href="#i-compare"/></svg></span><div><h3>What if…?</h3><p class="muted">Try a change without touching your saved inventory.</p></div></div>
+        <div class="grid-2 tight">
+          <div class="wi">
+            <p class="wi-title">My budget changes</p>
+            <div class="wi-row">
+              <div class="money sm"><span>₹</span><input type="number" id="sc-a" value="15000" aria-label="Current budget"></div>
+              <svg class="i muted-i"><use href="#i-arrow"/></svg>
+              <div class="money sm"><span>₹</span><input type="number" id="sc-b" value="30000" aria-label="New budget"></div>
+              <button class="btn quiet" id="btn-sc-budget">Compare</button>
+            </div>
+          </div>
+          <div class="wi">
+            <p class="wi-title">A supplier takes longer to deliver</p>
+            <div class="wi-row">
+              <select id="sc-product" aria-label="Product"></select>
+              <div class="money sm suffix"><input type="number" id="sc-lt" value="8" min="0" aria-label="New delivery days"><span>days</span></div>
+              <button class="btn quiet" id="btn-sc-lt">Compare</button>
+            </div>
+          </div>
+        </div>
+        <div id="sc-out" class="callout" hidden></div>
+      </div>
+    </section>
+
+    <!-- E: Ask -->
+    <section id="ask" class="section">
+      <header class="sec-head"><h2>Ask about your inventory</h2><p class="muted">Ask in plain English. Answers use your own numbers.</p></header>
+      <p class="ai-off banner" hidden>AI questions are unavailable until the assistant is connected. Your dashboard and purchase planner still work.</p>
+      <div class="card chat-card">
+        <div class="chat" id="chat" aria-live="polite">
+          <div class="empty-chat"><svg class="i lg"><use href="#i-chat"/></svg><p>Pick a question below or type your own.</p></div>
+        </div>
+        <div class="chips" id="chips"></div>
+        <form class="ask-row" id="ask-form">
+          <label for="ask-input" class="sr-only">Your question</label>
+          <input id="ask-input" placeholder="Which products may run out in the next five days?" autocomplete="off">
+          <button class="btn icon-btn" type="submit" aria-label="Ask"><svg class="i"><use href="#i-send"/></svg><span>Ask</span></button>
+        </form>
+      </div>
+    </section>
+
+    <footer class="foot">Demo data is synthetic. Your data stays in this browser session and is cleared when the server restarts.</footer>
+  </main>
+</div>
+
+<div id="modal" class="modal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-label="Product explanation">
+  <button class="close" id="modal-close" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button><div id="modal-body"></div></div></div>
+
+<script src="js/api.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
