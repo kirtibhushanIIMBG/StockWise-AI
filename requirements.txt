@@ -1,0 +1,20 @@
+# web
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+# data / ML
+pandas==3.0.6
+numpy==2.5.3
+pydantic==2.12.5
+python-dotenv==1.2.4
+scikit-learn==1.9.1
+shap==0.53.0
+joblib==1.6.0
+# AI
+langchain==1.4.3
+langgraph==1.2.14
+langchain-anthropic==1.7.5
+langchain-openrouter==0.2.9
+# tests
+pytest==9.1.1
+httpx==0.28.1

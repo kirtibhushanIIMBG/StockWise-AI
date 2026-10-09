@@ -1,0 +1,499 @@
+{
+  "chosen_model": {
+    "name": "hist_gradient_boosting",
+    "params": {
+      "l2_regularization": 0.0,
+      "learning_rate": 0.05,
+      "max_depth": 4,
+      "max_iter": 300
+    }
+  },
+  "cv": [
+    {
+      "fold_mae": [
+        2.978,
+        3.0897,
+        3.2982,
+        3.1378,
+        3.2026
+      ],
+      "mae_mean": 3.1413,
+      "mae_std": 0.1074,
+      "model": "flat_average",
+      "rmse_mean": 4.6727,
+      "wape_mean": 0.4132
+    },
+    {
+      "fold_mae": [
+        4.0043,
+        4.1783,
+        4.4354,
+        4.1164,
+        4.3041
+      ],
+      "mae_mean": 4.2077,
+      "mae_std": 0.1495,
+      "model": "seasonal_naive",
+      "rmse_mean": 6.2611,
+      "wape_mean": 0.5535
+    },
+    {
+      "fold_mae": [
+        2.9169,
+        3.0569,
+        3.2164,
+        3.0968,
+        3.0998
+      ],
+      "mae_mean": 3.0774,
+      "mae_std": 0.0963,
+      "model": "ridge",
+      "rmse_mean": 4.461,
+      "wape_mean": 0.4048
+    },
+    {
+      "fold_mae": [
+        2.8984,
+        3.0377,
+        3.2104,
+        3.0906,
+        3.1086
+      ],
+      "mae_mean": 3.0691,
+      "mae_std": 0.1021,
+      "model": "lasso",
+      "rmse_mean": 4.4927,
+      "wape_mean": 0.4037
+    },
+    {
+      "fold_mae": [
+        2.8968,
+        3.0268,
+        3.1708,
+        3.0068,
+        3.0139
+      ],
+      "mae_mean": 3.023,
+      "mae_std": 0.0873,
+      "model": "hist_gradient_boosting",
+      "rmse_mean": 4.4905,
+      "wape_mean": 0.3977
+    }
+  ],
+  "data": {
+    "cv_folds": 5,
+    "holdout_days": 56,
+    "n_days": 730,
+    "n_rows": 17520,
+    "n_skus": 24
+  },
+  "error_analysis": {
+    "bias": {
+      "mean_error": -0.346,
+      "over_forecast_share": 0.546,
+      "under_forecast_share": 0.4505
+    },
+    "by_day_of_week": [
+      {
+        "bias": -0.2244,
+        "group": "Mon",
+        "mae": 2.7371,
+        "n": 1848,
+        "wape": 0.4146
+      },
+      {
+        "bias": -0.1037,
+        "group": "Tue",
+        "mae": 2.7109,
+        "n": 1848,
+        "wape": 0.4178
+      },
+      {
+        "bias": -0.0224,
+        "group": "Wed",
+        "mae": 2.7628,
+        "n": 1848,
+        "wape": 0.4106
+      },
+      {
+        "bias": -0.4074,
+        "group": "Thu",
+        "mae": 2.8617,
+        "n": 1824,
+        "wape": 0.398
+      },
+      {
+        "bias": -0.6201,
+        "group": "Fri",
+        "mae": 3.0205,
+        "n": 1824,
+        "wape": 0.3868
+      },
+      {
+        "bias": -0.5287,
+        "group": "Sat",
+        "mae": 3.5836,
+        "n": 1824,
+        "wape": 0.3953
+      },
+      {
+        "bias": -0.5241,
+        "group": "Sun",
+        "mae": 3.4936,
+        "n": 1824,
+        "wape": 0.3725
+      }
+    ],
+    "by_sku_worst": [
+      {
+        "bias": 0.1359,
+        "mae": 0.4997,
+        "n": 535,
+        "sku": "SKU-114",
+        "wape": 1.6502
+      },
+      {
+        "bias": -0.0057,
+        "mae": 0.9041,
+        "n": 535,
+        "sku": "SKU-110",
+        "wape": 0.7802
+      },
+      {
+        "bias": 0.0955,
+        "mae": 1.4094,
+        "n": 535,
+        "sku": "SKU-115",
+        "wape": 0.5854
+      },
+      {
+        "bias": -0.0404,
+        "mae": 1.7606,
+        "n": 535,
+        "sku": "SKU-113",
+        "wape": 0.5419
+      },
+      {
+        "bias": -0.1595,
+        "mae": 1.7545,
+        "n": 535,
+        "sku": "SKU-116",
+        "wape": 0.5321
+      }
+    ],
+    "festival": {
+      "festival": {
+        "bias": -1.4855,
+        "mae": 3.6551,
+        "n": 576,
+        "wape": 0.3789
+      },
+      "normal": {
+        "bias": -0.2925,
+        "mae": 2.993,
+        "n": 12264,
+        "wape": 0.3987
+      }
+    },
+    "promo": {
+      "no_promo": {
+        "bias": -0.2876,
+        "mae": 2.9586,
+        "n": 11850,
+        "wape": 0.4
+      },
+      "promo": {
+        "bias": -1.0444,
+        "mae": 3.79,
+        "n": 990,
+        "wape": 0.3764
+      }
+    },
+    "source": "out-of-fold CV predictions",
+    "volume_bucket": [
+      {
+        "bias": 0.1105,
+        "group": "low (<2/day)",
+        "mae": 0.535,
+        "n": 1605,
+        "wape": 1.0981
+      },
+      {
+        "bias": -0.2298,
+        "group": "mid (2-10/day)",
+        "mae": 2.3459,
+        "n": 6955,
+        "wape": 0.4448
+      },
+      {
+        "bias": -0.7059,
+        "group": "high (>10/day)",
+        "mae": 5.0554,
+        "n": 4280,
+        "wape": 0.3596
+      }
+    ]
+  },
+  "feature_selection": {
+    "ablation": [
+      {
+        "cv_mae_without": 3.0162,
+        "delta_mae": -0.0068,
+        "group": "lags"
+      },
+      {
+        "cv_mae_without": 3.0106,
+        "delta_mae": -0.0124,
+        "group": "rolling"
+      },
+      {
+        "cv_mae_without": 3.0882,
+        "delta_mae": 0.0652,
+        "group": "level"
+      },
+      {
+        "cv_mae_without": 3.1194,
+        "delta_mae": 0.0964,
+        "group": "calendar"
+      },
+      {
+        "cv_mae_without": 3.0764,
+        "delta_mae": 0.0534,
+        "group": "promo"
+      },
+      {
+        "cv_mae_without": 3.0527,
+        "delta_mae": 0.0297,
+        "group": "festival"
+      }
+    ],
+    "lasso_zeroed": [
+      "Day of the week",
+      "Month of the year",
+      "Last 28-day average",
+      "Recent ups and downs in sales"
+    ],
+    "shap_ranking": [
+      {
+        "feature": "sku_mean",
+        "label": "Product's long-run average",
+        "mean_abs_shap": 3.4579
+      },
+      {
+        "feature": "is_weekend",
+        "label": "Weekend",
+        "mean_abs_shap": 0.7572
+      },
+      {
+        "feature": "rolling_mean_7",
+        "label": "Last 7-day average",
+        "mean_abs_shap": 0.5386
+      },
+      {
+        "feature": "rolling_mean_28",
+        "label": "Last 28-day average",
+        "mean_abs_shap": 0.3863
+      },
+      {
+        "feature": "on_promo",
+        "label": "Promotion running",
+        "mean_abs_shap": 0.384
+      },
+      {
+        "feature": "day_of_week",
+        "label": "Day of the week",
+        "mean_abs_shap": 0.3022
+      },
+      {
+        "feature": "lag_28",
+        "label": "Sales 4 weeks ago",
+        "mean_abs_shap": 0.1236
+      },
+      {
+        "feature": "rolling_std_7",
+        "label": "Recent ups and downs in sales",
+        "mean_abs_shap": 0.1168
+      },
+      {
+        "feature": "days_to_festival",
+        "label": "Days until Diwali",
+        "mean_abs_shap": 0.0793
+      },
+      {
+        "feature": "lag_1",
+        "label": "Yesterday's sales",
+        "mean_abs_shap": 0.0721
+      },
+      {
+        "feature": "lag_14",
+        "label": "Sales 2 weeks ago",
+        "mean_abs_shap": 0.07
+      },
+      {
+        "feature": "lag_7",
+        "label": "Sales on the same day last week",
+        "mean_abs_shap": 0.0673
+      },
+      {
+        "feature": "month",
+        "label": "Month of the year",
+        "mean_abs_shap": 0.0539
+      },
+      {
+        "feature": "is_festival",
+        "label": "Festival season (Diwali)",
+        "mean_abs_shap": 0.0083
+      }
+    ]
+  },
+  "holdout": {
+    "flat_average": {
+      "bias": -0.3317,
+      "mae": 3.1911,
+      "mape_nonzero": 0.6188,
+      "rmse": 4.8426,
+      "wape": 0.404
+    },
+    "hist_gradient_boosting": {
+      "bias": -0.3337,
+      "mae": 3.0605,
+      "mape_nonzero": 0.5838,
+      "rmse": 4.5648,
+      "wape": 0.3874
+    },
+    "lasso": {
+      "bias": -0.3078,
+      "mae": 3.1565,
+      "mape_nonzero": 0.6143,
+      "rmse": 4.6647,
+      "wape": 0.3996
+    },
+    "ridge": {
+      "bias": -0.3697,
+      "mae": 3.1678,
+      "mape_nonzero": 0.6092,
+      "rmse": 4.6435,
+      "wape": 0.401
+    },
+    "seasonal_naive": {
+      "bias": -0.1749,
+      "mae": 4.2641,
+      "mape_nonzero": 0.7685,
+      "rmse": 6.3456,
+      "wape": 0.5398
+    }
+  },
+  "improvement_pct": {
+    "vs_flat_average": 4.0925,
+    "vs_seasonal_naive": 28.2264
+  },
+  "residual_sigma": {
+    "SKU-101": {
+      "flat": 6.5241,
+      "ml": 6.6362
+    },
+    "SKU-102": {
+      "flat": 9.3829,
+      "ml": 8.2682
+    },
+    "SKU-103": {
+      "flat": 4.4566,
+      "ml": 4.1117
+    },
+    "SKU-104": {
+      "flat": 3.5044,
+      "ml": 3.4177
+    },
+    "SKU-105": {
+      "flat": 2.138,
+      "ml": 2.1012
+    },
+    "SKU-106": {
+      "flat": 9.2103,
+      "ml": 8.2527
+    },
+    "SKU-107": {
+      "flat": 5.0117,
+      "ml": 4.7417
+    },
+    "SKU-108": {
+      "flat": 6.2051,
+      "ml": 5.8916
+    },
+    "SKU-109": {
+      "flat": 3.3533,
+      "ml": 3.2859
+    },
+    "SKU-110": {
+      "flat": 1.1037,
+      "ml": 1.141
+    },
+    "SKU-111": {
+      "flat": 3.8336,
+      "ml": 3.4335
+    },
+    "SKU-112": {
+      "flat": 3.5481,
+      "ml": 3.6854
+    },
+    "SKU-113": {
+      "flat": 2.0534,
+      "ml": 2.1057
+    },
+    "SKU-114": {
+      "flat": 0.6103,
+      "ml": 0.6192
+    },
+    "SKU-115": {
+      "flat": 2.0793,
+      "ml": 2.0783
+    },
+    "SKU-116": {
+      "flat": 2.2349,
+      "ml": 2.1007
+    },
+    "SKU-117": {
+      "flat": 0.0,
+      "ml": 0.1328
+    },
+    "SKU-118": {
+      "flat": 3.0277,
+      "ml": 2.9377
+    },
+    "SKU-119": {
+      "flat": 2.5479,
+      "ml": 2.4524
+    },
+    "SKU-120": {
+      "flat": 8.2306,
+      "ml": 7.8562
+    },
+    "SKU-121": {
+      "flat": 6.5924,
+      "ml": 6.2919
+    },
+    "SKU-A": {
+      "flat": 5.9264,
+      "ml": 5.2966
+    },
+    "SKU-B": {
+      "flat": 3.4222,
+      "ml": 3.4686
+    },
+    "SKU-C": {
+      "flat": 2.5432,
+      "ml": 2.5275
+    }
+  },
+  "roi_signal": {
+    "pct_reduction": 3.8707,
+    "safety_stock_units_flat": 361,
+    "safety_stock_units_ml": 345,
+    "safety_stock_value_flat": 48570.0,
+    "safety_stock_value_ml": 46690.0,
+    "service_level": 0.95,
+    "value_freed": 1880.0,
+    "z": 1.65
+  },
+  "trained_through": "2026-09-30"
+}
