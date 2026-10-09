@@ -82,6 +82,7 @@
   ],
   "data": {
     "cv_folds": 5,
+    "holdout_block_days": 14,
     "holdout_days": 56,
     "n_days": 730,
     "n_rows": 17520,
@@ -355,6 +356,36 @@
       "wape": 0.404
     },
     "hist_gradient_boosting": {
+      "bias": -0.3587,
+      "mae": 3.0762,
+      "mape_nonzero": 0.5801,
+      "rmse": 4.5746,
+      "wape": 0.3894
+    },
+    "lasso": {
+      "bias": -0.319,
+      "mae": 3.1376,
+      "mape_nonzero": 0.6114,
+      "rmse": 4.676,
+      "wape": 0.3972
+    },
+    "ridge": {
+      "bias": -0.3535,
+      "mae": 3.1274,
+      "mape_nonzero": 0.6031,
+      "rmse": 4.648,
+      "wape": 0.3959
+    },
+    "seasonal_naive": {
+      "bias": -0.3222,
+      "mae": 4.2344,
+      "mape_nonzero": 0.7718,
+      "rmse": 6.2899,
+      "wape": 0.536
+    }
+  },
+  "holdout_one_step": {
+    "hist_gradient_boosting": {
       "bias": -0.3337,
       "mae": 3.0605,
       "mape_nonzero": 0.5838,
@@ -374,125 +405,118 @@
       "mape_nonzero": 0.6092,
       "rmse": 4.6435,
       "wape": 0.401
-    },
-    "seasonal_naive": {
-      "bias": -0.1749,
-      "mae": 4.2641,
-      "mape_nonzero": 0.7685,
-      "rmse": 6.3456,
-      "wape": 0.5398
     }
   },
   "improvement_pct": {
-    "vs_flat_average": 4.0925,
-    "vs_seasonal_naive": 28.2264
+    "vs_flat_average": 3.6017,
+    "vs_seasonal_naive": 27.3521
   },
   "residual_sigma": {
     "SKU-101": {
       "flat": 6.5241,
-      "ml": 6.6362
+      "ml": 6.7085
     },
     "SKU-102": {
       "flat": 9.3829,
-      "ml": 8.2682
+      "ml": 8.5699
     },
     "SKU-103": {
       "flat": 4.4566,
-      "ml": 4.1117
+      "ml": 4.1026
     },
     "SKU-104": {
       "flat": 3.5044,
-      "ml": 3.4177
+      "ml": 3.4287
     },
     "SKU-105": {
       "flat": 2.138,
-      "ml": 2.1012
+      "ml": 2.1053
     },
     "SKU-106": {
       "flat": 9.2103,
-      "ml": 8.2527
+      "ml": 7.8802
     },
     "SKU-107": {
       "flat": 5.0117,
-      "ml": 4.7417
+      "ml": 4.7797
     },
     "SKU-108": {
       "flat": 6.2051,
-      "ml": 5.8916
+      "ml": 5.7994
     },
     "SKU-109": {
       "flat": 3.3533,
-      "ml": 3.2859
+      "ml": 3.3016
     },
     "SKU-110": {
       "flat": 1.1037,
-      "ml": 1.141
+      "ml": 1.1405
     },
     "SKU-111": {
       "flat": 3.8336,
-      "ml": 3.4335
+      "ml": 3.4427
     },
     "SKU-112": {
       "flat": 3.5481,
-      "ml": 3.6854
+      "ml": 3.6743
     },
     "SKU-113": {
       "flat": 2.0534,
-      "ml": 2.1057
+      "ml": 2.1035
     },
     "SKU-114": {
       "flat": 0.6103,
-      "ml": 0.6192
+      "ml": 0.6204
     },
     "SKU-115": {
       "flat": 2.0793,
-      "ml": 2.0783
+      "ml": 2.0907
     },
     "SKU-116": {
       "flat": 2.2349,
-      "ml": 2.1007
+      "ml": 2.0924
     },
     "SKU-117": {
       "flat": 0.0,
-      "ml": 0.1328
+      "ml": 0.1502
     },
     "SKU-118": {
       "flat": 3.0277,
-      "ml": 2.9377
+      "ml": 2.9032
     },
     "SKU-119": {
       "flat": 2.5479,
-      "ml": 2.4524
+      "ml": 2.4228
     },
     "SKU-120": {
       "flat": 8.2306,
-      "ml": 7.8562
+      "ml": 7.9664
     },
     "SKU-121": {
       "flat": 6.5924,
-      "ml": 6.2919
+      "ml": 6.2343
     },
     "SKU-A": {
       "flat": 5.9264,
-      "ml": 5.2966
+      "ml": 5.1937
     },
     "SKU-B": {
       "flat": 3.4222,
-      "ml": 3.4686
+      "ml": 3.4129
     },
     "SKU-C": {
       "flat": 2.5432,
-      "ml": 2.5275
+      "ml": 2.5307
     }
   },
   "roi_signal": {
-    "pct_reduction": 3.8707,
+    "pct_reduction": 3.2324,
     "safety_stock_units_flat": 361,
     "safety_stock_units_ml": 345,
     "safety_stock_value_flat": 48570.0,
-    "safety_stock_value_ml": 46690.0,
+    "safety_stock_value_ml": 47000.0,
     "service_level": 0.95,
-    "value_freed": 1880.0,
+    "value_freed": 1570.0,
     "z": 1.65
   },
   "trained_through": "2026-09-30"

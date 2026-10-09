@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import logging
+import math
 import uuid
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -237,7 +238,8 @@ def sales_history():
 def forecast_model():
     m = json.loads(config.METRICS_PATH.read_text())
     c, h, imp = m["chosen_model"]["name"], m["holdout"], m["improvement_pct"]
-    summary = (f"The {c.replace('_', ' ')} model's daily forecast is off by {h[c]['mae']:.2f} units on average over "
+    summary = (f"Forecasting up to {m['data']['holdout_block_days']} days ahead, the {c.replace('_', ' ')} model's "
+               f"daily forecast is off by {h[c]['mae']:.2f} units on average over "
                f"{m['data']['holdout_days']} days it never saw, against {h['flat_average']['mae']:.2f} for the flat "
                f"average ({imp['vs_flat_average']:.1f}% better) and {h['seasonal_naive']['mae']:.2f} for repeating last "
                f"week ({imp['vs_seasonal_naive']:.1f}% better). Demo data is synthetic.")
@@ -250,25 +252,29 @@ def forecast(sku: str, horizon: int | None = Query(None, ge=1, le=90)):
     hist = sales_history()
     if item is None or sku not in set(hist["sku"]):
         return err(f"No sales history for product '{sku[:40]}'.", 404)
-    n = horizon or round(item["lead_time_days"]) + config.REVIEW_PERIOD_DAYS
+    need = math.ceil(item["lead_time_days"]) + config.REVIEW_PERIOD_DAYS  # days one order must cover
+    n = horizon or need
     bundle = load_forecaster()
-    fc = forecast_sku(bundle, hist, sku, n)
+    full = forecast_sku(bundle, hist, sku, max(n, need))  # ordering always sees lead time + review, whatever n is
+    fc = full[:n]
     base, drivers = explain_row(bundle, next_day_features(hist, sku))
     for d in drivers:
         d["contribution"] = round(d["contribution"], 2)
-    inv = inventory_comparison(item, [p["units"] for p in fc], bundle)
+    inv = inventory_comparison(item, [p["units"] for p in full], bundle)
     last = hist[hist["sku"] == sku].tail(60)
     top = drivers[0]
     return {"ok": True, "sku": sku, "product_name": item["product_name"], "horizon": n,
             "history": [{"date": d.date().isoformat(), "units": int(u)} for d, u in zip(last["date"], last["units_sold"])],
             "forecast": fc, "base_value": round(base, 2), "drivers": drivers, "inventory": inv,
-            "summary": (f"Expected demand tomorrow is {fc[0]['units']:.1f} units (the average product sells {base:.1f}); "
+            "summary": (f"Expected demand tomorrow is {fc[0]['units']:.1f} units (this product's long-run average is "
+                        f"{bundle['flat_means'].get(sku, 0.0):.1f}; the model's starting point before product-specific "
+                        f"factors is {base:.1f}); "
                         f"the biggest factor is '{top['label']}' ({top['contribution']:+.1f}). Ordering on the forecast "
                         f"gives a reorder point of {inv['forecast']['reorder_point']} units instead of "
                         f"{inv['simple_average']['reorder_point']}."),
             "assumptions": ["No promotions are planned in the forecast period.",
                             "Sales history is synthetic demo data.",
-                            "Safety stock uses the model's error on the last 56 days, not the flat demand spread."]}
+                            "Safety stock uses the model's error on rolling 14-day forecasts over the last 56 days, not the flat demand spread."]}
 
 
 app.mount("/", StaticFiles(directory=config.FRONTEND_DIR, html=True), name="front-end")

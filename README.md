@@ -84,19 +84,19 @@ stockwise-ai/
 The engine's default demand is still a flat average. `src/model.py` adds a scikit-learn forecast that replaces it on request, using two years of **synthetic** daily sales for the demo products (`data/sales_history.csv`).
 - **Features** (earlier days only, so no look-ahead; tested): lags 1/7/14/28, rolling 7/28-day mean and 7-day spread, the product's running average, weekday, month, weekend, promotion flag, Diwali window and days to Diwali.
 - **Pipeline:** StandardScaler on numbers, one-hot weekday, then Ridge, Lasso or HistGradientBoosting.
-- **Validation:** 5 expanding-window `TimeSeriesSplit` folds over dates; `GridSearchCV` tunes each model; the last 56 days are never used for tuning and score the chosen model against two baselines (flat average, seasonal naive).
+- **Validation:** 5 expanding-window `TimeSeriesSplit` folds over dates; `GridSearchCV` tunes each model; the last 56 days are never used for tuning; they score every model as rolling 14-day recursive forecasts (each predicted day feeds the next day's lags, exactly like `/api/forecast/{sku}`) against two baselines (flat average, seasonal naive repeating the last observed week). One-step holdout scores are kept in `holdout_one_step` for comparison.
 - **Feature selection:** feature-group ablation, Lasso zeroed features, SHAP ranking. **Error analysis** on out-of-fold predictions: by product, weekday, promotion, festival, sales volume, bias.
-- **Forecast to ordering:** the next N days are predicted step by step (each prediction feeds the next day's lags); safety stock uses the model's holdout error, and the unchanged inventory engine returns reorder point, order quantity and cost next to the flat-average numbers.
+- **Forecast to ordering:** the next N days are predicted step by step (each prediction feeds the next day's lags); safety stock uses the model's error on rolling 14-day holdout forecasts. The unchanged inventory engine sets the reorder point and status from the lead-time forecast, and the order is sized from the forecast total over lead time + the 7-day review period (always forecast internally, whatever horizon the caller asks for), shown next to the flat-average numbers.
 - **Endpoints (no AI key needed):** `GET /api/forecast/model` (model card) and `GET /api/forecast/{sku}?horizon=N` (60 days of actuals, forecast, SHAP drivers in plain English, simple-average vs forecast ordering). Browse them at `/docs`. The web page itself is unchanged.
 
 Headline results (`models/metrics.json`, synthetic data, rerunning `python -m src.model` reproduces them exactly):
-| Holdout (last 56 days) | MAE (units/day) | Change vs flat average |
+| Holdout (last 56 days, rolling 14-day forecasts) | MAE (units/day) | Change vs flat average |
 |---|---|---|
 | Flat average (today's default) | 3.19 | n/a |
-| Seasonal naive (same weekday last week) | 4.26 | n/a |
-| HistGradientBoosting (chosen, 5-fold CV MAE 3.02) | 3.06 | **4.1% better**, about 4% (28.2% better than seasonal naive) |
+| Seasonal naive (same weekday last week) | 4.23 | n/a |
+| HistGradientBoosting (chosen, 5-fold CV MAE 3.02) | 3.08 | **3.6% better**, about 4% (27.4% better than seasonal naive) |
 
-Safety stock for the 24 demo products falls from Rs 48,570 to Rs 46,690 (3.9% less cash tied up). The gain is modest because the synthetic demand is noisy; the model also under-forecasts festival and promotion days (see `error_analysis`). Only `models/forecast_model.joblib`, created by this repo's own training command, is ever loaded.
+Safety stock for the 24 demo products falls from Rs 48,570 to Rs 47,000 (3.2% less cash tied up). The gain is modest because the synthetic demand is noisy; the model also under-forecasts festival and promotion days (see `error_analysis`). Only `models/forecast_model.joblib`, created by this repo's own training command, is ever loaded.
 
 ## Data-processing workflow
 1. **CSV upload: almost any inventory CSV** (`src/data.py`).
@@ -303,7 +303,7 @@ Without a key, the dashboard, upload, planner, scenarios and export all still wo
 
 ## Tests
 ```bash
-~/.venvs/stockwise/bin/python -m pytest -q     # 82 passed
+~/.venvs/stockwise/bin/python -m pytest -q     # 84 passed
 ```
 | File | Covers |
 |---|---|
@@ -311,14 +311,14 @@ Without a key, the dashboard, upload, planner, scenarios and export all still wo
 | `test_csv_formats.py` | One deliberately different CSV per case: semicolon + BOM + decimal commas; tab-separated Windows-encoded file with title lines; weekly sales and lead time in weeks; sales history across stores; per-warehouse file; analytics export with text columns; messy numbers; codes without names; Excel file; a missing column (asked for, never guessed); retail-forecasting-style dataset through the API |
 | `test_language_parser.py` | Plain-English extraction with a **mocked** model: Scenario 5, missing-value flagging, de-duplication, update detection |
 | `test_graph.py` | Number grounding. Ask workflow: verified answer, a 3-tool question under the production limits, rewrite of an invented figure, visible note when a figure stays unverified, empty-inventory guard, per-session chat memory. Entry workflow: pause at review with nothing saved, save after confirmation, cancel, invalid edit looping back to review, vague text |
-| `test_model.py` | Forecast model: no look-ahead in features, time-ordered CV folds, chosen model beats the flat average on the holdout, forecast horizon and non-negative values, SHAP additivity, engine comparison, and the two forecast endpoints (404 on unknown product) |
+| `test_model.py` | Forecast model: no look-ahead in features, time-ordered CV folds, chosen model beats the flat average on the holdout, forecast horizon and non-negative values, SHAP additivity, engine comparison (reorder point from lead-time demand; short forecasts rejected), rolling holdout never seeing actuals inside a block, and the two forecast endpoints (404 on unknown product; a short horizon doesn't change the ordering numbers) |
 | `test_api.py` | Upload and validation, session isolation, confirmation flow, honest "AI unavailable" behaviour, real tool registration, the 5-tool limit, a runaway model stopping cleanly, the OpenRouter/Anthropic switch |
 
 Unit tests never call a live model: `conftest.py` blanks any real key.
 
 | Category | Status |
 |---|---|
-| Automated tests (deterministic + mocked model) | ✅ 82/82 passed |
+| Automated tests (deterministic + mocked model) | ✅ 84/84 passed |
 | Real CSV files | ✅ A 2,000-product inventory (0.1 s) and the reference repo's three CSVs, including its 10 MB / 109,400-row sales history (under 1 s, matching its own processed figures). The full upload → "Help us read your file" → analysis flow was checked in a real browser |
 | Live AI via OpenRouter, `openrouter/free` (2026-10-09) | ✅ Multi-tool question; follow-up using chat memory; lead time 5→8 days (Scenario 7); Shampoo extraction + confirm (Scenario 5); vague text with every figure flagged missing and none invented (Scenario 6); a question over the 2,000-product file. All chat answers passed the number check |
 | Live AI via OpenRouter, `anthropic/claude-sonnet-5.5` | ✅ Two multi-tool questions with verified figures; the remaining checks stopped when the account ran out of credit |

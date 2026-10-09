@@ -15,15 +15,15 @@ Both come from one weak input: demand is treated as a flat average, so weekends,
 - **New: a demand forecast** (weekday, trend, promotion and Diwali effects) that sets safety stock from the model's *measured* error instead of a rule of thumb.
 
 ## Measured model results (synthetic demo data, `models/metrics.json`)
-These are measured on 24 products x 730 days of **synthetic** sales, scored on the last 56 days that the model never saw during tuning.
+These are measured on 24 products x 730 days of **synthetic** sales, scored on the last 56 days that the model never saw during tuning, as rolling 14-day forecasts (each day's prediction feeds the next, exactly as the app forecasts).
 
 | Measure | Flat average (today) | ML forecast | Change |
 |---|---|---|---|
-| Holdout MAE (units/day) | 3.19 | 3.06 | 4.1% lower |
-| Holdout WAPE | 40.4% | 38.7% | |
-| Safety stock, 24 demo products | Rs 48,570 (361 units) | Rs 46,690 (345 units) | 3.9% less cash tied up |
+| Holdout MAE (units/day) | 3.19 | 3.08 | 3.6% lower |
+| Holdout WAPE | 40.4% | 38.9% | |
+| Safety stock, 24 demo products | Rs 48,570 (361 units) | Rs 47,000 (345 units) | 3.2% less cash tied up |
 
-The gain over the flat average is real but modest (the synthetic noise is large); the gain over "repeat last week" is 28.2%. We do not claim more than this. The pilot below is how a real customer would confirm it.
+The gain over the flat average is real but modest (the synthetic noise is large); the gain over "repeat last week" is 27.4%. We do not claim more than this. The pilot below is how a real customer would confirm it.
 
 ## ROI model
 **Every input below is an assumption** for the persona, not a measurement. Change them and the totals change.
@@ -36,15 +36,15 @@ The gain over the flat average is real but modest (the synthetic noise is large)
 | Carrying cost of capital and storage | 18% a year |
 | Revenue lost to stock-outs today | 4% of revenue (Rs 30,00,000) |
 | Gross margin | 18% |
-| Reduction in stock-out loss from better forecasts | 10% (assumption; the measured 4.1% error gain makes this plausible but it needs a pilot to confirm) |
+| Reduction in stock-out loss from better forecasts | 10% (assumption; the measured 3.6% error gain makes this plausible but it needs a pilot to confirm) |
 | Manager time on reorder decisions | 10 hours a week; StockWise saves half |
 | Manager hourly cost | Rs 500 |
 
 **Formulas and results**
-- (a) Working capital freed = safety-stock value x measured reduction = Rs 24,00,000 x 3.87% = **Rs 92,897**. Annual saving = freed x 18% = **Rs 16,721**.
+- (a) Working capital freed = safety-stock value x measured reduction = Rs 24,00,000 x 3.23% = **Rs 77,578**. Annual saving = freed x 18% = **Rs 13,964**.
 - (b) Lost-sales margin recovered = revenue x stock-out loss x reduction x margin = Rs 7,50,00,000 x 4% x 10% x 18% = **Rs 54,000**.
 - (c) Time saved = 5 hours x 52 weeks x Rs 500 = **Rs 1,30,000**.
-- **Total annual benefit = Rs 2,00,721 (about Rs 16,727 a month).**
+- **Total annual benefit = Rs 1,97,964 (about Rs 16,497 a month).**
 
 Honest reading: roughly two thirds of the benefit is time saved by the deterministic reorder and budget tools; the ML forecast mainly adds (a) and part of (b). Even with the forecast benefit set to zero, the tool pays back.
 
@@ -55,7 +55,7 @@ Honest reading: roughly two thirds of the benefit is time saved by the determini
 | Growth | up to 1,500 | Rs 2,499 |
 | Scale | up to 5,000 | Rs 5,999 |
 
-**Payback for the persona (Growth tier):** annual price Rs 29,988 / monthly benefit Rs 16,727 = **about 1.8 months**.
+**Payback for the persona (Growth tier):** annual price Rs 29,988 / monthly benefit Rs 16,497 = **about 1.8 months**.
 
 ## Go-to-market
 1. **Distributor associations** (FMCG distributor and retailer bodies): a 30-minute WhatsApp-recorded demo using the members' own CSV.
@@ -64,7 +64,7 @@ Honest reading: roughly two thirds of the benefit is time saved by the determini
 4. **Pilot to paid:** 30-day free pilot on one category; compare stock-outs and cash tied up with the previous 30 days; convert on the numbers.
 
 ## Risks and caveats
-- **Synthetic data.** All model figures come from generated demo history. Real sales are noisier or smoother; a pilot must re-run `python -m src.model` on the customer's file before any claim.
+- **Synthetic data.** All model figures come from generated demo history. Real sales are noisier or smoother; loading a customer's own sales history and retraining on it is **not implemented yet** (`python -m src.model` always trains on the bundled demo history); a pilot needs that step first, before any claim.
 - **Small accuracy gain.** If real demand is mostly random, the forecast adds little over the average; the product still delivers the reorder, budget and explanation value.
 - **Cold start.** Products with under 28 days of history cannot be forecast and fall back to the flat average.
 - **Trust.** Mitigated by showing the formula behind every number and checking every AI-written figure against the calculations.

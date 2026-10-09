@@ -2,7 +2,8 @@
 
 Pipeline: lag / rolling / calendar / promo / festival features -> StandardScaler (numeric) + one-hot (day of week)
 -> Ridge, Lasso or HistGradientBoosting, tuned with GridSearchCV on date-aware TimeSeriesSplit folds.
-The last FORECAST_HOLDOUT_DAYS days are never used for tuning; they score the chosen model against two baselines:
+The last FORECAST_HOLDOUT_DAYS days are never used for tuning; they score the models as rolling recursive
+FORECAST_EVAL_HORIZON-day forecasts (the way the API forecasts) against two baselines:
 the flat average (what the inventory engine uses today) and seasonal naive (same weekday last week).
 SHAP explains each forecast. The forecast replaces the flat average inside the unchanged inventory engine.
 
@@ -28,7 +29,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from . import config
 from .data import FESTIVAL_DATES, load_sales_history, load_csv_path
-from .inventory_engine import analyze_item, ceil
+from .inventory_engine import analyze_item, ceil, money
 
 FEATURE_GROUPS = {
     "lags": ["lag_1", "lag_7", "lag_14", "lag_28"],
@@ -128,6 +129,41 @@ def flat_pred(train: pd.DataFrame, test: pd.DataFrame):
     return test["sku"].map(train.groupby("sku")["units_sold"].mean()).fillna(0.0).to_numpy()
 
 
+def recursive_predict(pipe, history: pd.DataFrame, start, days: int) -> pd.Series:
+    """Forecast `days` days from `start` for every SKU, feeding each prediction back as the next day's lag
+    (the same recursion forecast_sku serves). Only actuals before `start` are used. Indexed by (date, sku)."""
+    h = history[history["date"] < start + pd.Timedelta(days=days)].copy()
+    h.loc[h["date"] >= start, "units_sold"] = np.nan
+    for d in pd.date_range(start, periods=days):
+        f = build_features(h[h["date"] <= d])
+        row = f[f["date"] == d]
+        p = pd.Series(np.clip(pipe.predict(row[ALL_FEATURES]), 0, None), index=row["sku"].to_numpy())
+        m = h["date"] == d
+        h.loc[m, "units_sold"] = h.loc[m, "sku"].map(p).to_numpy()
+    out = h[h["date"] >= start]
+    return pd.Series(out["units_sold"].to_numpy(), index=pd.MultiIndex.from_frame(out[["date", "sku"]]))
+
+
+def rolling_holdout(history: pd.DataFrame, hold: pd.DataFrame, block: int, predict) -> np.ndarray:
+    """Score the holdout as consecutive `block`-day forecasts; each block starts from the actuals before it."""
+    dates = np.sort(hold["date"].unique())
+    preds = [predict(pd.Timestamp(dates[i]), min(block, len(dates) - i)) for i in range(0, len(dates), block)]
+    idx = pd.MultiIndex.from_frame(hold[["date", "sku"]])
+    return pd.concat(preds).reindex(idx).to_numpy(float)
+
+
+def seasonal_naive_block(history: pd.DataFrame):
+    """Same weekday in the last week before the block start (the multi-day version of seasonal naive)."""
+    actual = history.set_index(["date", "sku"])["units_sold"]
+    skus = history["sku"].unique()
+
+    def predict(start, days):
+        idx = pd.MultiIndex.from_product([pd.date_range(start, periods=days), skus], names=["date", "sku"])
+        src = [(d - pd.Timedelta(days=7 * ((d - start).days // 7 + 1)), s) for d, s in idx]
+        return pd.Series(actual.reindex(src).to_numpy(float), index=idx)
+    return predict
+
+
 def _group_scores(df, pred) -> dict:
     y = df["units_sold"].to_numpy()
     if not len(y):
@@ -221,11 +257,15 @@ def train(history: pd.DataFrame, holdout_days: int = config.FORECAST_HOLDOUT_DAY
     best = fitted[best_name]
     chosen_est = best.best_estimator_.named_steps["model"]
 
-    # holdout
-    holdout = {n: scores(yh, g.best_estimator_.predict(hold[ALL_FEATURES])) for n, g in fitted.items()}
+    # holdout, scored the way the API forecasts: rolling recursive blocks, never using actuals inside a block
+    block = config.FORECAST_EVAL_HORIZON
+    multi = {n: rolling_holdout(history, hold, block, lambda s, d, p=g.best_estimator_: recursive_predict(p, history, s, d))
+             for n, g in fitted.items()}
+    holdout = {n: scores(yh, p) for n, p in multi.items()}
     holdout["flat_average"] = scores(yh, flat_pred(dev, hold))
-    holdout["seasonal_naive"] = scores(yh, hold["lag_7"].to_numpy())
-    pred_h = best.best_estimator_.predict(hold[ALL_FEATURES])
+    holdout["seasonal_naive"] = scores(yh, rolling_holdout(history, hold, block, seasonal_naive_block(history)))
+    holdout_one_step = {n: scores(yh, g.best_estimator_.predict(hold[ALL_FEATURES])) for n, g in fitted.items()}
+    pred_h = multi[best_name]
     imp = {f"vs_{b}": 100 * (holdout[b]["mae"] - holdout[best_name]["mae"]) / holdout[b]["mae"]
            for b in ("flat_average", "seasonal_naive")}
 
@@ -300,9 +340,9 @@ def train(history: pd.DataFrame, holdout_days: int = config.FORECAST_HOLDOUT_DAY
     metrics = _clean({
         "trained_through": bundle["trained_through"],
         "data": {"n_skus": history["sku"].nunique(), "n_days": history["date"].nunique(), "n_rows": len(history),
-                 "holdout_days": holdout_days, "cv_folds": n_splits},
+                 "holdout_days": holdout_days, "cv_folds": n_splits, "holdout_block_days": block},
         "chosen_model": {"name": best_name, "params": {k.split("__", 1)[1]: v for k, v in best.best_params_.items()}},
-        "cv": cv, "holdout": holdout, "improvement_pct": imp,
+        "cv": cv, "holdout": holdout, "holdout_one_step": holdout_one_step, "improvement_pct": imp,
         "feature_selection": {"ablation": ablation, "lasso_zeroed": lasso_zeroed, "shap_ranking": shap_rank},
         "error_analysis": error_analysis, "residual_sigma": sigma, "roi_signal": roi})
     return bundle, metrics
@@ -354,18 +394,35 @@ def forecast_sku(bundle: dict, history: pd.DataFrame, sku: str, horizon: int) ->
 
 
 def inventory_comparison(item: dict, forecast_units: list[float], bundle: dict) -> dict:
-    """Same engine, two demand views: flat average vs ML forecast over the lead time."""
+    """Same engine, two demand views: flat average vs ML forecast.
+
+    The engine takes one daily rate, which can't describe both windows of a varying forecast. So the forecast view
+    takes the reorder point and status from the lead-time forecast (demand before the delivery arrives) and sizes
+    the order from the forecast total over lead time + review period (the window one order must cover), using the
+    engine's own reorder rule and min/max limits. `forecast_units` must start tomorrow and span that window."""
     sku, sig = item["sku"], bundle["residual_sigma"].get(item["sku"], {"ml": 0.0, "flat": 0.0})
     lt = max(1, ceil(float(item["lead_time_days"])))
-    views = {"simple_average": (bundle["flat_means"].get(sku, 0.0), sig["flat"]),
-             "forecast": (float(np.mean(forecast_units[:lt])), sig["ml"])}
-    out = {}
-    for name, (d, s) in views.items():
-        r = analyze_item(dict(item, avg_daily_demand=d, demand_std=s, safety_stock=None))
-        out[name] = {"avg_daily_demand": round(d, 2), "demand_std": round(s, 2), **{k: r[k] for k in (
-            "safety_stock", "reorder_point", "target_stock", "suggested_qty", "estimated_cost", "status")}}
-    return out
+    need = lt + config.REVIEW_PERIOD_DAYS
+    if len(forecast_units) < need:
+        raise ValueError(f"forecast covers {len(forecast_units)} days; ordering needs {need}")
+    keys = ("safety_stock", "reorder_point", "target_stock", "suggested_qty", "estimated_cost", "status")
 
+    d, s = bundle["flat_means"].get(sku, 0.0), sig["flat"]
+    r = analyze_item(dict(item, avg_daily_demand=d, demand_std=s, safety_stock=None))
+    out = {"simple_average": {"avg_daily_demand": round(d, 2), "demand_std": round(s, 2), **{k: r[k] for k in keys}}}
+
+    d_lt, window = float(np.mean(forecast_units[:lt])), float(np.sum(forecast_units[:need]))
+    r = analyze_item(dict(item, avg_daily_demand=d_lt, demand_std=sig["ml"], safety_stock=None))
+    rop, pos = r["reorder_point"], r["inventory_position"]
+    tgt = max(ceil(window + r["safety_stock"]), rop)
+    if item.get("max_stock") is not None:  # no more than the user can hold, but at least the reorder point
+        tgt = max(min(tgt, math.floor(item["max_stock"])), rop)
+    ordering = r["status"] != "Low Demand" and pos <= rop and (d_lt > 0 or r["backorders"] > 0)
+    qty = max(0, ceil(tgt - pos)) if ordering else 0
+    out["forecast"] = {"avg_daily_demand": round(d_lt, 2), "window_demand": round(window, 2),
+                       "demand_std": round(sig["ml"], 2), **{k: r[k] for k in keys},
+                       "target_stock": tgt, "suggested_qty": qty, "estimated_cost": money(qty * float(item["unit_cost"]))}
+    return out
 
 if __name__ == "__main__":
     t0 = time.time()

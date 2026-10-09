@@ -40,6 +40,7 @@ MODEL_PATH = MODELS_DIR / "forecast_model.joblib"
 METRICS_PATH = MODELS_DIR / "metrics.json"
 FORECAST_HOLDOUT_DAYS = 56       # last 8 weeks, never seen by CV or tuning
 FORECAST_CV_FOLDS = 5
+FORECAST_EVAL_HORIZON = 14       # holdout is scored as rolling 14-day recursive forecasts, like the API serves
 RANDOM_STATE = 42
 
 

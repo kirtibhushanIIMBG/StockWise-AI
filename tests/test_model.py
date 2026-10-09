@@ -7,7 +7,7 @@ import app as main
 from src import config
 from src.data import load_csv_path, make_demo_sales_history
 from src.model import (ALL_FEATURES, build_features, date_folds, explain_row, forecast_sku, inventory_comparison,
-                       next_day_features, train)
+                       next_day_features, recursive_predict, train)
 
 TINY = {"ridge": {"model__alpha": [1.0]},
         "hist_gradient_boosting": {"model__learning_rate": [0.1], "model__max_depth": [4], "model__max_iter": [60]}}
@@ -74,6 +74,28 @@ def test_inventory_comparison_uses_engine(small):
     inv = inventory_comparison(items[0], fc, bundle)
     assert set(inv) == {"simple_average", "forecast"}
     assert inv["forecast"]["reorder_point"] > 0
+    with pytest.raises(ValueError):  # fewer days than lead time + review must not be averaged
+        inventory_comparison(items[0], fc[:3], bundle)
+
+
+def test_forecast_reorder_point_uses_lead_time_demand(small):
+    items, _, bundle, _ = small
+    item = dict(items[0], lead_time_days=6, current_stock=80, incoming_stock=0, backorders=0,
+                min_stock=None, max_stock=None)
+    fc = [20.0] * 6 + [0.0] * 7  # demand all before delivery: averaging 13 days would hide the shortage
+    inv = inventory_comparison(item, fc, bundle)["forecast"]
+    assert inv["reorder_point"] >= 120 and inv["suggested_qty"] > 0
+    assert inv["target_stock"] == max(inv["reorder_point"], 120 + inv["safety_stock"])
+
+
+def test_recursive_holdout_never_sees_actuals_inside_block(small):
+    _, hist, bundle, _ = small
+    start = hist["date"].max() - pd.Timedelta(days=9)
+    before = recursive_predict(bundle["pipeline"], hist, start, 7)
+    spiked = hist.copy()
+    spiked.loc[spiked["date"] >= start, "units_sold"] = 10_000  # actuals inside the block must not leak in
+    assert recursive_predict(bundle["pipeline"], spiked, start, 7).equals(before)
+    assert len(before) == 7 * hist["sku"].nunique() and (before >= 0).all()
 
 
 @pytest.fixture
@@ -93,7 +115,9 @@ def test_api_forecast(client):
     r = client.get("/api/forecast/SKU-101").json()
     assert r["ok"] and len(r["history"]) == 60 and len(r["forecast"]) == 13  # lead time 6 + review 7
     assert r["drivers"] and {"simple_average", "forecast"} <= set(r["inventory"])
-    assert len(client.get("/api/forecast/SKU-101?horizon=5").json()["forecast"]) == 5
+    short = client.get("/api/forecast/SKU-101?horizon=5").json()
+    assert len(short["forecast"]) == 5
+    assert short["inventory"] == r["inventory"]  # ordering always uses lead time + review, not the response horizon
 
 
 def test_api_forecast_unknown_sku_and_bad_horizon(client):

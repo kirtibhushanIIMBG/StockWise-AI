@@ -17,4 +17,4 @@
 - Live demo checks in a real browser and with real CSV files.
 - The final numbers: every figure in the docs was copied from `models/metrics.json` after a clean retrain, not from memory. The retrain is deterministic, so the same numbers come back.
 
-**Where the AI got it wrong, and how we caught it.** The agent leaked internal limit text and crashed on multi-tool questions (found in manual testing, fixed in `1cc0f81`). For the forecast we report the holdout result as measured (4.1% better than the flat average), not a hoped-for one.
+**Where the AI got it wrong, and how we caught it.** The agent leaked internal limit text and crashed on multi-tool questions (found in manual testing, fixed in `1cc0f81`). For the forecast we report the holdout result as measured (3.6% better than the flat average), not a hoped-for one; a CodeRabbit review caught that we first scored one-day-ahead forecasts while the app forecasts 13 days ahead, so we re-scored with rolling 14-day forecasts.
