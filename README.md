@@ -43,7 +43,7 @@ stockwise-ai/
 ```
 
 ## Tech stack
-Python 3.11+ · FastAPI · LangChain 1.x (`create_agent`) · LangGraph 1.x (`StateGraph`, `interrupt`, `InMemorySaver`) · `langchain-anthropic` (Claude) · Pandas · Pydantic v2 · pytest · vanilla HTML/CSS/JS (no build step, no chart library; bar charts are drawn with CSS).
+Python 3.11+ · FastAPI · LangChain 1.x (`create_agent`) · LangGraph 1.x (`StateGraph`, `interrupt`, `InMemorySaver`) · `langchain-openrouter` / `langchain-anthropic` (Claude) · Pandas · Pydantic v2 · pytest · vanilla HTML/CSS/JS (no build step, no chart library; bar charts are drawn with CSS).
 
 ## Data-processing workflow
 1. **CSV upload.** Pandas reads the file. Column names are normalised and common aliases are accepted. Every row is validated by Pydantic: required fields must be present and numbers must not be negative. Duplicate SKUs are skipped and reported.
@@ -148,14 +148,21 @@ Every product has a *Why this action?* panel built by `explanation_engine.py` fr
 cd stockwise-ai
 python3 -m venv ~/.venvs/stockwise          # a venv can't live in a path containing ":" (see note)
 ~/.venvs/stockwise/bin/pip install -r back-end/requirements.txt
-cp .env.example .env                        # add ANTHROPIC_API_KEY (optional)
+cp .env.example .env                        # add OPENROUTER_API_KEY or ANTHROPIC_API_KEY (optional)
 cd back-end
 ~/.venvs/stockwise/bin/uvicorn main:app --port 8000
 # open http://localhost:8000
 ```
 *Note:* Python refuses to create a venv inside a folder whose path contains `:` (this project folder is `AI:ML Project`), so the venv lives in your home folder.
 
-**Environment variables:** `ANTHROPIC_API_KEY` (needed for the two AI features) and `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`; set any tool-capable Claude model your account supports). Without a key, the dashboard, upload, planner, scenarios and export all still work, and the AI screens show *"AI questions are unavailable until the assistant is connected."*
+**Environment variables** (in `stockwise-ai/.env`, which git ignores):
+| Variable | Meaning |
+|---|---|
+| `OPENROUTER_API_KEY` | Use Claude through [OpenRouter](https://openrouter.ai) (`langchain-openrouter`). Takes priority if both keys are set. |
+| `ANTHROPIC_API_KEY` | Use Claude directly through Anthropic (`langchain-anthropic`). |
+| `AI_MODEL` | Optional. Defaults to `anthropic/claude-sonnet-5.5` on OpenRouter or `claude-sonnet-5-5` on Anthropic. Any model with tool calling and structured output works. |
+
+Without a key, the dashboard, upload, planner, scenarios and export all still work, and the AI screens show *"AI questions are unavailable until the assistant is connected."*
 
 ## Example questions
 - What should I order today?
@@ -167,7 +174,7 @@ cd back-end
 
 ## Tests
 ```bash
-cd back-end && ~/.venvs/stockwise/bin/python -m pytest -q tests     # 39 passed
+cd back-end && ~/.venvs/stockwise/bin/python -m pytest -q tests     # 40 passed
 ```
 These cover all mandatory demonstration scenarios 1–4 and 7 (exact expected numbers), zero demand, default/statistical safety stock, excess stock, incoming/backorders, deterministic priority, strict budget enforcement across many budgets, partial allocation, budget comparison, NL extraction with a **mocked** model (scenario 5, missing-value flagging, de-duplication, update detection), CSV upload/validation, negative rejection, duplicate SKUs, session isolation, confirmation validation, honest "AI unavailable" behaviour, real tool registration plus invocation through `create_agent` with a fake model, the 5-tool limit (a 6th call is blocked and the model still answers), and a runaway model stopping without showing the library's limit message.
 
@@ -178,7 +185,7 @@ LangGraph tests (`test_graph.py`, mocked models) cover:
 
 | Category | Status |
 |---|---|
-| Automated tests (deterministic + mocked model) | ✅ 39/39 passed |
+| Automated tests (deterministic + mocked model) | ✅ 40/40 passed |
 | Live AI tests (real Claude calls) | ⚠️ **Not executed.** No `ANTHROPIC_API_KEY` was available in the build environment |
 
 ## Limitations

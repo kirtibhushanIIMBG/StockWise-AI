@@ -123,3 +123,14 @@ def test_runaway_model_stops_without_leaking_limit_text():
     from conftest import A
     res = agent_mod.run_agent([{"role": "user", "content": "q"}], lambda: [A], model=ToolFake(messages=tool_turns(0, None)))
     assert res["answer"] == ""  # the ask graph turns this into "I couldn't complete that request"
+
+
+def test_model_provider_switch(monkeypatch):
+    import agent as agent_mod
+    monkeypatch.setattr(config, "AI_MODEL", "anthropic/claude-sonnet-5.5")
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "sk-or-test")
+    m = agent_mod.get_model()
+    assert type(m).__name__ == "ChatOpenRouter" and m.request_timeout == config.AGENT_TIMEOUT_SECONDS * 1000  # ms
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-test")
+    assert type(agent_mod.get_model()).__name__ == "ChatAnthropic"

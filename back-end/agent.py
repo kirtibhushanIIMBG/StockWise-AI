@@ -31,10 +31,13 @@ Mention key assumptions briefly (e.g. 7-day review period, default buffer) when 
 
 
 def get_model():
+    """The one chat model behind both AI features: OpenRouter if its key is set, else Anthropic."""
+    opts = dict(model=config.AI_MODEL, temperature=0, max_retries=config.AGENT_MAX_RETRIES, max_tokens=2000)
+    if config.OPENROUTER_API_KEY:
+        from langchain_openrouter import ChatOpenRouter
+        return ChatOpenRouter(api_key=config.OPENROUTER_API_KEY, timeout=config.AGENT_TIMEOUT_SECONDS * 1000, **opts)  # ms
     from langchain_anthropic import ChatAnthropic
-    return ChatAnthropic(model=config.ANTHROPIC_MODEL, api_key=config.ANTHROPIC_API_KEY,
-                         temperature=0, timeout=config.AGENT_TIMEOUT_SECONDS,
-                         max_retries=config.AGENT_MAX_RETRIES, max_tokens=2000)
+    return ChatAnthropic(api_key=config.ANTHROPIC_API_KEY, timeout=config.AGENT_TIMEOUT_SECONDS, **opts)  # seconds
 
 
 def build_agent(get_items, model=None):

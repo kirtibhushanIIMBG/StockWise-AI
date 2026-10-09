@@ -8,8 +8,11 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT.parent / ".env")
 load_dotenv(ROOT / ".env")
 
+# OpenRouter is used when its key is set; otherwise Anthropic directly.
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5").strip()
+AI_MODEL = (os.getenv("AI_MODEL", "").strip()
+            or ("anthropic/claude-sonnet-5.5" if OPENROUTER_API_KEY else "claude-sonnet-5-5"))
 
 # Inventory policy defaults
 REVIEW_PERIOD_DAYS = 7
@@ -32,4 +35,4 @@ FRONTEND_DIR = ROOT.parent / "front-end"
 
 
 def ai_available() -> bool:
-    return bool(ANTHROPIC_API_KEY)
+    return bool(OPENROUTER_API_KEY or ANTHROPIC_API_KEY)
