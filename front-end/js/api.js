@@ -19,6 +19,7 @@ const API = {
   sample: () => API.call("/api/sample", { method: "POST" }),
   upload(file) { const fd = new FormData(); fd.append("file", file); return API.call("/api/upload", { method: "POST", body: fd }); },
   parse: (text) => API.json("/api/parse-inventory", { text }),
+  cancel: () => API.call("/api/cancel-inventory", { method: "POST" }),
   confirm: (items, apply_default_buffer) => API.json("/api/confirm-inventory", { items, apply_default_buffer }),
   plan: (budget) => API.json("/api/purchase-plan", { budget }),
   scenario: (body) => API.json("/api/scenario", body),

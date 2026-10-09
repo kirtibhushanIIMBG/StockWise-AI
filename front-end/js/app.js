@@ -62,7 +62,10 @@ async function init() {
     } catch (e) { showMsg(e.message, false); } finally { busy(ev.target, false); }
   };
 
-  $("#btn-cancel").onclick = () => { $("#preview").hidden = true; showMsg("Nothing was changed."); };
+  $("#btn-cancel").onclick = async () => {
+    try { await API.cancel(); } catch (e) { /* the draft simply stays unsaved */ }
+    $("#preview").hidden = true; showMsg("Nothing was changed.");
+  };
 
   $("#btn-confirm").onclick = async (ev) => {
     busy(ev.target, true, "Saving");
@@ -127,7 +130,8 @@ async function askQuestion(q) {
   chat.appendChild(wait); chat.scrollTop = chat.scrollHeight;
   try {
     const r = await API.ask(q);
-    wait.innerHTML = `<div class="who">${icon("spark")}StockWise recommendation</div>${md(r.answer)}`;
+    const check = r.verified && r.tools_used.length ? `<div class="verified">${icon("check")}Figures checked against your inventory</div>` : "";
+    wait.innerHTML = `<div class="who">${icon("spark")}StockWise recommendation</div>${md(r.answer)}${check}`;
   } catch (e) {
     wait.innerHTML = `<div class="who">${icon("spark")}StockWise</div><p>${esc(e.message)}</p>`;
   }

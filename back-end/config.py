@@ -23,6 +23,9 @@ AGENT_MAX_TOOL_CALLS = 5
 AGENT_RECURSION_LIMIT = 12       # LangGraph super-steps (model + tool turns)
 AGENT_TIMEOUT_SECONDS = 60
 AGENT_MAX_RETRIES = 1
+AGENT_MEMORY_MESSAGES = 6        # recent chat turns (questions + answers) passed back to the agent
+ASK_MAX_REVISIONS = 1            # rewrites allowed when an answer contains unverified figures
+ASK_GRAPH_RECURSION_LIMIT = 10   # outer LangGraph workflow steps
 
 SAMPLE_CSV = ROOT / "data" / "sample_inventory.csv"
 FRONTEND_DIR = ROOT.parent / "front-end"

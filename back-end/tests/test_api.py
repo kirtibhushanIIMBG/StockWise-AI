@@ -54,12 +54,32 @@ def test_purchase_plan_budget_and_export():
     assert e.status_code == 200 and e.text.startswith("Priority,SKU")
 
 
-def test_confirm_requires_valid_data():
+def test_confirm_goes_through_review_step(monkeypatch):
+    import language_parser
+    from language_parser import ExtractedProduct, ExtractionResult
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(language_parser, "extract", lambda text, llm=None: ExtractionResult(
+        intent="inventory_data", products=[ExtractedProduct(product_name="Shampoo", current_stock=50,
+                                                            avg_daily_demand=8, lead_time_days=6, unit_cost=120)]))
     c = client()
-    assert c.post("/api/confirm-inventory", json={"items": [{"product_name": "Soap"}]}).status_code == 400
-    ok = c.post("/api/confirm-inventory", json={"items": [{"sku": "SKU-SH", "product_name": "Shampoo",
-              "current_stock": 50, "avg_daily_demand": 8, "lead_time_days": 6, "unit_cost": 120}]}).json()
+    assert c.post("/api/confirm-inventory", json={"items": []}).status_code == 409  # nothing pending
+    rows = c.post("/api/parse-inventory", json={"text": "We have 50 units of Shampoo..."}).json()["rows"]
+    assert c.get("/api/inventory").json()["summary"]["total_products"] == 24  # not saved yet
+    bad = c.post("/api/confirm-inventory", json={"items": [{**rows[0], "unit_cost": None}]})
+    assert bad.status_code == 400
+    ok = c.post("/api/confirm-inventory", json={"items": rows}).json()
     assert ok["ok"] and ok["added"][0]["safety_stock"] == 16 and ok["added"][0]["safety_stock_method"] == "default_buffer"
+    assert ok["summary"]["total_products"] == 25
+
+
+def test_ask_endpoint_runs_graph(monkeypatch):
+    import agent as agent_mod
+    msgs = iter([AIMessage(content="", tool_calls=[{"name": "get_inventory_summary", "args": {}, "id": "1"}]),
+                 AIMessage(content="**What we found** 7 products may run out soon.")])
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(agent_mod, "get_model", lambda: ToolFake(messages=msgs))
+    r = client().post("/api/ask", json={"question": "What should I order?"}).json()
+    assert r["ok"] and r["tools_used"] == ["get_inventory_summary"] and r["verified"]
 
 
 def test_ask_without_key_is_honest(monkeypatch):

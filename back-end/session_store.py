@@ -42,5 +42,14 @@ class SessionStore:
             s["items"] = list(by_sku.values())
             s["source"] = "custom"
 
+    # The LangGraph thread of an inventory draft waiting for the user's confirmation.
+    def set_pending(self, sid: str, thread_id: str | None):
+        with self._lock:
+            self._ensure(sid)["pending"] = thread_id
+
+    def get_pending(self, sid: str) -> str | None:
+        with self._lock:
+            return self._ensure(sid)["pending"]
+
 
 store = SessionStore()

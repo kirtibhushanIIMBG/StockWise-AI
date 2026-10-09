@@ -54,16 +54,15 @@ def _text(content) -> str:
     return "".join(c.get("text", "") for c in content if isinstance(c, dict))
 
 
-def ask(question: str, get_items, model=None) -> dict:
+def run_agent(messages: list, get_items, model=None) -> dict:
+    """Run the tool-using agent on a short conversation (oldest first, last = current question).
+    Returns the draft answer plus the raw tool outputs, which the LangGraph verify step checks against."""
     tool_log: list = []
     agent = build_agent(get_items, tool_log, model)
-    result = agent.invoke({"messages": [{"role": "user", "content": question}]},
-                          config={"recursion_limit": config.AGENT_RECURSION_LIMIT})
-    answer = ""
-    for m in reversed(result["messages"]):
-        if getattr(m, "type", "") == "ai" and _text(m.content).strip():
-            answer = _text(m.content).strip()
-            break
-    log.info("question=%r tools=%s", question, tool_log)
-    return {"answer": answer or "I couldn't complete that request. Please try rephrasing it.",
-            "tools_used": [t["tool"] for t in tool_log]}
+    result = agent.invoke({"messages": messages}, config={"recursion_limit": config.AGENT_RECURSION_LIMIT})
+    new = result["messages"][len(messages):]  # ignore the conversation history we passed in
+    answer = next((_text(m.content).strip() for m in reversed(new)
+                   if getattr(m, "type", "") == "ai" and _text(m.content).strip()), "")
+    log.info("tools=%s", tool_log)
+    return {"answer": answer, "tool_log": tool_log,
+            "tool_outputs": [_text(m.content) for m in new if getattr(m, "type", "") == "tool"]}

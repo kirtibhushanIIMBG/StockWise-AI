@@ -6,13 +6,16 @@ import csv
 import io
 import logging
 import math
+import uuid
 
-from fastapi import FastAPI, File, Request, Response, UploadFile
+from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from langgraph.types import Command
 
 import config
-from data_processing import DataError, parse_csv, validate_records
+import graph
+from data_processing import DataError, parse_csv
 from explanation_engine import explain_plan, explain_product
 from inventory_engine import analyze_all, summarize
 from procurement_engine import compare_budgets, compare_lead_time, purchase_plan
@@ -91,51 +94,59 @@ async def upload(request: Request, file: UploadFile = File(...)):
     return {**inventory_payload(request.state.sid), "warnings": warnings, "loaded": len(items)}
 
 
+def session_ctx(sid: str) -> graph.Ctx:
+    """Runtime context for the LangGraph workflows, bound to one browser session."""
+    return graph.Ctx(get_items=lambda: store.get_items(sid), save_items=lambda items: store.upsert(sid, items))
+
+
 @app.post("/api/parse-inventory")
 def parse_inventory(request: Request, body: ParseRequest):
+    """Start the entry graph: extract → pause at the human review step (nothing is saved yet)."""
     if not config.ai_available():
         return err(AI_OFF, 503)
-    from language_parser import build_preview, extract
-    items = store.get_items(request.state.sid)
+    sid = request.state.sid
+    thread_id = f"{sid}:entry:{uuid.uuid4().hex[:8]}"  # a fresh draft replaces any earlier unsaved one
     try:
-        result = extract(body.text)
+        result = graph.ENTRY_GRAPH.invoke({"text": body.text}, graph.thread(thread_id), context=session_ctx(sid))
     except Exception:  # noqa: BLE001
         log.exception("parse failed")
         return err(AI_DOWN, 503)
-    preview = build_preview(result, {i["sku"] for i in items},
-                            {i["product_name"].lower(): i["sku"] for i in items})
-    if not preview["rows"]:
-        # Scenario 6: vague text — check whether a mentioned product already exists
-        known = [i["product_name"] for i in items if i["product_name"].lower() in body.text.lower()
-                 or any(w in body.text.lower() for w in i["product_name"].lower().split() if len(w) > 4)]
-        msg = ("We couldn't find specific stock numbers in your description. Please tell us: units in stock, "
-               "average daily sales, supplier delivery time (days) and cost per unit.")
-        if known:
-            msg += f" We already have {', '.join(known[:3])} in your inventory — try asking StockWise about it."
-        return {"ok": True, "intent": preview["intent"], "rows": [], "complete": False, "message": msg}
-    return {"ok": True, **preview}
+    review = graph.pending_review(result)
+    if review is None:  # vague text: nothing to confirm (Scenario 6)
+        store.set_pending(sid, None)
+        return {"ok": True, "intent": result.get("intent"), "rows": [], "complete": False, "message": result["message"]}
+    store.set_pending(sid, thread_id)
+    rows = review["rows"]
+    return {"ok": True, "intent": result.get("intent"), "rows": rows,
+            "complete": all(not r["missing"] for r in rows)}
 
 
 @app.post("/api/confirm-inventory")
 def confirm_inventory(request: Request, body: ConfirmRequest):
-    rows = []
-    for r in body.items:
-        r = {k: v for k, v in r.items() if k in {
-            "sku", "product_name", "category", "supplier", "current_stock", "avg_daily_demand",
-            "lead_time_days", "unit_cost", "safety_stock", "incoming_stock", "backorders"}}
-        if r.get("safety_stock") in (None, "") and not body.apply_default_buffer:
-            return err(f"Please enter extra buffer units for {r.get('product_name') or 'each product'}, "
-                       "or accept the default buffer.")
-        if r.get("safety_stock") in (None, "") and r.get("avg_daily_demand") not in (None, ""):
-            r["safety_stock"] = None  # engine applies disclosed default buffer
-        rows.append(r)
-    items, errors = validate_records(rows)
-    if errors or not items:
-        return err("Some details are missing or invalid. " + " ".join(errors))
-    store.upsert(request.state.sid, items)
-    out = inventory_payload(request.state.sid)
-    out["added"] = [r for r in out["products"] if r["sku"] in {i["sku"] for i in items}]
+    """Resume the paused entry graph with the user's (possibly edited) rows."""
+    sid = request.state.sid
+    thread_id = store.get_pending(sid)
+    if not thread_id:
+        return err("There is nothing waiting to be saved. Describe your stock first.", 409)
+    decision = {"action": "save", "items": body.items, "apply_default_buffer": body.apply_default_buffer}
+    result = graph.ENTRY_GRAPH.invoke(Command(resume=decision), graph.thread(thread_id), context=session_ctx(sid))
+    review = graph.pending_review(result)
+    if review is not None:  # validation failed: the graph is back at the review step, still unsaved
+        return err("Some details are missing or invalid. " + " ".join(review["errors"]))
+    store.set_pending(sid, None)
+    out = inventory_payload(sid)
+    out["added"] = [r for r in out["products"] if r["sku"] in set(result.get("saved", []))]
     return out
+
+
+@app.post("/api/cancel-inventory")
+def cancel_inventory(request: Request):
+    sid = request.state.sid
+    thread_id = store.get_pending(sid)
+    if thread_id:
+        graph.ENTRY_GRAPH.invoke(Command(resume={"action": "cancel"}), graph.thread(thread_id), context=session_ctx(sid))
+        store.set_pending(sid, None)
+    return {"ok": True, "message": "Nothing was changed."}
 
 
 @app.post("/api/purchase-plan")
@@ -161,16 +172,18 @@ def scenario(request: Request, body: ScenarioRequest):
 
 @app.post("/api/ask")
 def ask(request: Request, body: AskRequest):
+    """Run the ask graph: guard → LangChain agent → number check → (rewrite) → answer.
+    The chat thread is keyed by session, so follow-up questions keep their context."""
     if not config.ai_available():
         return err(AI_OFF, 503)
-    from agent import ask as agent_ask
     sid = request.state.sid
     try:
-        res = agent_ask(body.question, lambda: store.get_items(sid))
+        res = graph.ASK_GRAPH.invoke({"question": body.question}, graph.thread(f"{sid}:chat"), context=session_ctx(sid))
     except Exception:  # noqa: BLE001
         log.exception("agent failed")
         return err(AI_DOWN, 503)
-    return {"ok": True, **res}
+    return {"ok": True, "answer": res["answer"], "tools_used": res.get("tools_used", []),
+            "verified": res.get("verified", False)}
 
 
 @app.get("/api/export")
