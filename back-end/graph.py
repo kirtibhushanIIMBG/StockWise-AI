@@ -99,8 +99,7 @@ def guard(state: AskState, runtime: Runtime[Ctx]) -> dict:
 def call_agent(state: AskState, runtime: Runtime[Ctx]) -> dict:
     history = state["messages"][-config.AGENT_MEMORY_MESSAGES:]
     res = agent_mod.run_agent(history, runtime.context.get_items, runtime.context.model)
-    return {"draft": res["answer"], "evidence": res["tool_outputs"],
-            "tools_used": [t["tool"] for t in res["tool_log"]]}
+    return {"draft": res["answer"], "evidence": res["tool_outputs"], "tools_used": res["tools_used"]}
 
 
 def verify(state: AskState) -> dict:

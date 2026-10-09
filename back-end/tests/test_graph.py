@@ -65,6 +65,14 @@ def test_ask_graph_flags_answer_that_stays_unverified():
     assert not out["verified"] and out["unverified"] == ["4321"] and "could not be matched" in out["answer"]
 
 
+def test_ask_graph_handles_multi_tool_questions_with_production_limits():
+    calls = [AIMessage(content="", tool_calls=[{"name": n, "args": a, "id": str(i)}]) for i, (n, a) in enumerate(
+        [("get_inventory_summary", {}), ("analyze_product", {"product": "Product A"}), ("create_purchase_plan", {"budget_inr": 12000})])]
+    model = ToolFake(messages=iter(calls + [AIMessage(content="Order 110 units of Product A for ₹11,000.")]))
+    out = graph.ASK_GRAPH.invoke({"question": "q"}, tid(), context=graph.Ctx(lambda: [A, B, C], model=model))
+    assert len(out["tools_used"]) == 3 and out["verified"]
+
+
 def test_ask_graph_empty_inventory_needs_no_model():
     out = graph.ASK_GRAPH.invoke({"question": "What should I order?"}, tid(), context=graph.Ctx(lambda: [], model=None))
     assert out["answer"] == graph.NO_DATA and out["tools_used"] == []

@@ -20,7 +20,7 @@ LOW_DEMAND_THRESHOLD = 0.5       # units/day at or below this = low demand
 
 # Agent guardrails
 AGENT_MAX_TOOL_CALLS = 5
-AGENT_RECURSION_LIMIT = 12       # LangGraph super-steps (model + tool turns)
+AGENT_RECURSION_LIMIT = 40       # graph steps, not turns: ~5 per tool turn; the call limits above stop by 33
 AGENT_TIMEOUT_SECONDS = 60
 AGENT_MAX_RETRIES = 1
 AGENT_MEMORY_MESSAGES = 6        # recent chat turns (questions + answers) passed back to the agent

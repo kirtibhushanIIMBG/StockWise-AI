@@ -6,7 +6,7 @@ from typing import Optional
 from langchain_core.tools import tool
 
 from explanation_engine import explain_product
-from inventory_engine import analyze_all, summarize
+from inventory_engine import analyze_all, money, summarize
 from procurement_engine import compare_budgets, compare_lead_time, purchase_plan
 
 SLIM = ("sku", "product_name", "status", "current_stock", "avg_daily_demand", "coverage_days",
@@ -26,24 +26,19 @@ def _find(items, query: str):
     return matches[0] if len(matches) == 1 else None
 
 
-def build_tools(get_items, log: list):
-    """get_items: zero-arg callable returning this session's items. log: records tool usage."""
-
-    def _record(name, args):
-        log.append({"tool": name, "args": args})
+def build_tools(get_items):
+    """get_items: zero-arg callable returning this session's items."""
 
     @tool
     def get_inventory_summary() -> dict:
         """Overall inventory health: counts by status, how many products need reordering,
         stock value, total recommended purchase cost, and the 8 most urgent products."""
-        _record("get_inventory_summary", {})
         rows = analyze_all(get_items())
         return {**summarize(rows), "most_urgent": [_slim(r) for r in rows[:8]]}
 
     @tool
     def analyze_product(product: str) -> dict:
         """Detailed analysis and plain-language explanation for one product (name or SKU)."""
-        _record("analyze_product", {"product": product})
         items = get_items()
         item = _find(items, product)
         if not item:
@@ -56,7 +51,6 @@ def build_tools(get_items, log: list):
     def identify_inventory_risks(within_days: Optional[float] = None) -> dict:
         """Products at risk: out of stock, critical, order soon, excess stock and low demand.
         If within_days is given, also list products whose stock may run out within that many days."""
-        _record("identify_inventory_risks", {"within_days": within_days})
         rows = analyze_all(get_items())
         out = {s: [_slim(r) for r in rows if r["status"] == s]
                for s in ("Out of Stock", "Critical", "Order Soon", "Low Demand")}
@@ -70,24 +64,20 @@ def build_tools(get_items, log: list):
     @tool
     def calculate_replenishment(products: Optional[list[str]] = None) -> dict:
         """Reorder quantities and costs. Pass product names/SKUs, or omit for all products needing reorder."""
-        _record("calculate_replenishment", {"products": products})
         items = get_items()
         if products:
-            chosen, missing = [], []
-            for p in products:
-                f = _find(items, p)
-                (chosen.append(f) if f else missing.append(p))
-            rows = analyze_all(chosen)
+            found = {p: _find(items, p) for p in products}
+            rows = analyze_all([f for f in found.values() if f])
+            missing = [p for p, f in found.items() if not f]
         else:
             rows, missing = [r for r in analyze_all(items) if r["needs_reorder"]], []
         return {"items": [{**_slim(r), "reorder_point": r["reorder_point"], "target_stock": r["target_stock"]}
                           for r in rows],
-                "total_cost": round(sum(r["estimated_cost"] for r in rows), 2), "not_found": missing}
+                "total_cost": money(sum(r["estimated_cost"] for r in rows)), "not_found": missing}
 
     @tool
     def create_purchase_plan(budget_inr: float) -> dict:
         """Allocate a purchasing budget (in rupees) across products by priority without exceeding it."""
-        _record("create_purchase_plan", {"budget_inr": budget_inr})
         if budget_inr < 0:
             return {"error": "Budget must be zero or more."}
         p = purchase_plan(get_items(), budget_inr)
@@ -99,8 +89,6 @@ def build_tools(get_items, log: list):
                           product: Optional[str] = None, new_lead_time_days: Optional[float] = None) -> dict:
         """What-if comparison. kind='budget' needs budget_a and budget_b (rupees).
         kind='lead_time' needs product and new_lead_time_days. Never changes saved data."""
-        _record("compare_scenarios", {"kind": kind, "budget_a": budget_a, "budget_b": budget_b,
-                                      "product": product, "new_lead_time_days": new_lead_time_days})
         items = get_items()
         if kind == "budget" and budget_a is not None and budget_b is not None and min(budget_a, budget_b) >= 0:
             return compare_budgets(items, budget_a, budget_b)

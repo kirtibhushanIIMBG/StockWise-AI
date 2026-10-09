@@ -69,7 +69,10 @@ Python 3.11+ · FastAPI · LangChain 1.x (`create_agent`) · LangGraph 1.x (`Sta
 This is a transparent **greedy** method, not a global optimum. Products are ranked by: stockouts → critical → other reorders → fewer days of cover → SKU (tie-breaker). Each product gets its full quantity if the budget allows; otherwise it gets as many whole units as the remaining budget can buy. Unfunded units are reported separately. An assertion guarantees that spending never exceeds the budget. Scenario tools compare two budgets, or recalculate one product with a new lead time **on a copy**, so the saved data never changes.
 
 ## LangChain agent (`agent.py`, `tools.py`)
-`create_agent(ChatAnthropic, tools, system_prompt, middleware=[ToolCallLimitMiddleware(run_limit=5), ModelCallLimitMiddleware(run_limit=7)])` is invoked with `recursion_limit=12`, a 60 s model timeout and at most 1 retry.
+`create_agent(ChatAnthropic, tools, system_prompt, middleware=[ToolCallLimitMiddleware(run_limit=5, exit_behavior="continue"), ModelCallLimitMiddleware(run_limit=7, exit_behavior="error")])` runs with a 60 s model timeout and at most 1 retry.
+- **Tool limit.** At most 5 tools run. Calls past the limit do not run; the model is told to answer with what it already has.
+- **Model-call limit.** At most 7 model calls. A model that keeps going is stopped, and the user sees *"I couldn't complete that request"*, never the library's internal limit message.
+- **`recursion_limit=40`.** This is only a backstop. LangGraph counts graph steps, not turns: about 5 per tool turn including the middleware, so the call limits stop the agent by step 33.
 
 | Tool | What it does |
 |---|---|
@@ -164,18 +167,18 @@ cd back-end
 
 ## Tests
 ```bash
-cd back-end && ~/.venvs/stockwise/bin/python -m pytest -q tests     # 37 passed
+cd back-end && ~/.venvs/stockwise/bin/python -m pytest -q tests     # 39 passed
 ```
-These cover all mandatory demonstration scenarios 1–4 and 7 (exact expected numbers), zero demand, default/statistical safety stock, excess stock, incoming/backorders, deterministic priority, strict budget enforcement across many budgets, partial allocation, budget comparison, NL extraction with a **mocked** model (scenario 5, missing-value flagging, de-duplication, update detection), CSV upload/validation, negative rejection, duplicate SKUs, session isolation, confirmation validation, honest "AI unavailable" behaviour, real tool registration plus invocation through `create_agent` with a fake model, and the tool-call limit stopping an endlessly looping model.
+These cover all mandatory demonstration scenarios 1–4 and 7 (exact expected numbers), zero demand, default/statistical safety stock, excess stock, incoming/backorders, deterministic priority, strict budget enforcement across many budgets, partial allocation, budget comparison, NL extraction with a **mocked** model (scenario 5, missing-value flagging, de-duplication, update detection), CSV upload/validation, negative rejection, duplicate SKUs, session isolation, confirmation validation, honest "AI unavailable" behaviour, real tool registration plus invocation through `create_agent` with a fake model, the 5-tool limit (a 6th call is blocked and the model still answers), and a runaway model stopping without showing the library's limit message.
 
 LangGraph tests (`test_graph.py`, mocked models) cover:
 - number grounding (accepted and flagged figures);
-- the ask workflow: verified answer, rewrite of an invented figure, a visible note when a figure stays unverified, the empty-inventory guard, and per-session chat memory;
+- the ask workflow: verified answer, a 3-tool question under the production limits, rewrite of an invented figure, a visible note when a figure stays unverified, the empty-inventory guard, and per-session chat memory;
 - the entry workflow: pausing at review with nothing saved, saving after confirmation, cancel, an invalid edit looping back to review, and vague text.
 
 | Category | Status |
 |---|---|
-| Automated tests (deterministic + mocked model) | ✅ 37/37 passed |
+| Automated tests (deterministic + mocked model) | ✅ 39/39 passed |
 | Live AI tests (real Claude calls) | ⚠️ **Not executed.** No `ANTHROPIC_API_KEY` was available in the build environment |
 
 ## Limitations

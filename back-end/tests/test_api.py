@@ -93,29 +93,33 @@ class ToolFake(GenericFakeChatModel):
         return self
 
 
+def tool_turns(n, answer="Here is what I found."):
+    """Fake model: n tool-call turns, then a text answer (answer=None never stops)."""
+    i = 0
+    while answer is None or i < n:
+        i += 1
+        yield AIMessage(content="", tool_calls=[{"name": "get_inventory_summary", "args": {}, "id": str(i)}])
+    yield AIMessage(content=answer)
+
+
 def test_real_tools_registered_and_invoked():
     from conftest import A, B, C
     msgs = iter([AIMessage(content="", tool_calls=[{"name": "create_purchase_plan", "args": {"budget_inr": 12000}, "id": "1"}]),
                  AIMessage(content="**What we found** Buy Product C first.")])
-    log = []
-    ag = agent_mod.build_agent(lambda: [A, B, C], log, model=ToolFake(messages=msgs))
-    out = ag.invoke({"messages": [{"role": "user", "content": "plan for 12000"}]})
-    tool_msg = [m for m in out["messages"] if m.type == "tool"][0]
-    assert '"total_spend": 12000' in tool_msg.content or "12000" in tool_msg.content
-    assert log == [{"tool": "create_purchase_plan", "args": {"budget_inr": 12000}}]
-    names = {t.name for t in agent_mod.build_tools(lambda: [], [])}
+    res = agent_mod.run_agent([{"role": "user", "content": "plan for 12000"}], lambda: [A, B, C], model=ToolFake(messages=msgs))
+    assert res["tools_used"] == ["create_purchase_plan"] and "12000" in res["tool_outputs"][0]
+    names = {t.name for t in agent_mod.build_tools(lambda: [])}
     assert names == {"get_inventory_summary", "analyze_product", "identify_inventory_risks",
                      "calculate_replenishment", "create_purchase_plan", "compare_scenarios"}
 
 
-def test_agent_tool_call_limit_bounds_loop():
+def test_agent_runs_at_most_five_tools_then_answers():
     from conftest import A
-    def endless():
-        i = 0
-        while True:
-            i += 1
-            yield AIMessage(content="", tool_calls=[{"name": "get_inventory_summary", "args": {}, "id": str(i)}])
-    log = []
-    ag = agent_mod.build_agent(lambda: [A], log, model=ToolFake(messages=endless()))
-    ag.invoke({"messages": [{"role": "user", "content": "loop"}]}, config={"recursion_limit": 30})
-    assert len(log) <= config.AGENT_MAX_TOOL_CALLS
+    res = agent_mod.run_agent([{"role": "user", "content": "q"}], lambda: [A], model=ToolFake(messages=tool_turns(6)))  # 6th is blocked
+    assert len(res["tools_used"]) == config.AGENT_MAX_TOOL_CALLS and res["answer"] == "Here is what I found."
+
+
+def test_runaway_model_stops_without_leaking_limit_text():
+    from conftest import A
+    res = agent_mod.run_agent([{"role": "user", "content": "q"}], lambda: [A], model=ToolFake(messages=tool_turns(0, None)))
+    assert res["answer"] == ""  # the ask graph turns this into "I couldn't complete that request"

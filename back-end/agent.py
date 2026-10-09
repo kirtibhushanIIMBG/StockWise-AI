@@ -3,6 +3,7 @@ import logging
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware, ToolCallLimitMiddleware
+from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 
 import config
 from tools import build_tools
@@ -36,14 +37,16 @@ def get_model():
                          max_retries=config.AGENT_MAX_RETRIES, max_tokens=2000)
 
 
-def build_agent(get_items, tool_log: list, model=None):
+def build_agent(get_items, model=None):
     return create_agent(
         model=model or get_model(),
-        tools=build_tools(get_items, tool_log),
+        tools=build_tools(get_items),
         system_prompt=SYSTEM_PROMPT,
         middleware=[
-            ToolCallLimitMiddleware(run_limit=config.AGENT_MAX_TOOL_CALLS, exit_behavior="end"),
-            ModelCallLimitMiddleware(run_limit=config.AGENT_MAX_TOOL_CALLS + 2, exit_behavior="end"),
+            # Calls past the limit don't run; the model is told to answer with what it already has.
+            ToolCallLimitMiddleware(run_limit=config.AGENT_MAX_TOOL_CALLS, exit_behavior="continue"),
+            # Hard stop for a model that keeps going anyway ("end" would show its limit text to the user).
+            ModelCallLimitMiddleware(run_limit=config.AGENT_MAX_TOOL_CALLS + 2, exit_behavior="error"),
         ],
     )
 
@@ -57,12 +60,14 @@ def _text(content) -> str:
 def run_agent(messages: list, get_items, model=None) -> dict:
     """Run the tool-using agent on a short conversation (oldest first, last = current question).
     Returns the draft answer plus the raw tool outputs, which the LangGraph verify step checks against."""
-    tool_log: list = []
-    agent = build_agent(get_items, tool_log, model)
-    result = agent.invoke({"messages": messages}, config={"recursion_limit": config.AGENT_RECURSION_LIMIT})
+    try:
+        result = build_agent(get_items, model).invoke(
+            {"messages": messages}, config={"recursion_limit": config.AGENT_RECURSION_LIMIT})
+    except ModelCallLimitExceededError:
+        log.warning("model call limit reached")
+        return {"answer": "", "tools_used": [], "tool_outputs": []}  # → "couldn't complete that request"
     new = result["messages"][len(messages):]  # ignore the conversation history we passed in
-    answer = next((_text(m.content).strip() for m in reversed(new)
-                   if getattr(m, "type", "") == "ai" and _text(m.content).strip()), "")
-    log.info("tools=%s", tool_log)
-    return {"answer": answer, "tool_log": tool_log,
-            "tool_outputs": [_text(m.content) for m in new if getattr(m, "type", "") == "tool"]}
+    ran = [m for m in new if m.type == "tool" and m.status == "success"]  # blocked calls come back as errors
+    answer = next((_text(m.content).strip() for m in reversed(new) if m.type == "ai" and _text(m.content).strip()), "")
+    log.info("tool calls=%s", [(c["name"], c["args"]) for m in new if m.type == "ai" for c in m.tool_calls])
+    return {"answer": answer, "tools_used": [m.name for m in ran], "tool_outputs": [_text(m.content) for m in ran]}
