@@ -151,6 +151,27 @@ const Dashboard = {
     $("#btn-export").href = "/api/export?budget=" + encodeURIComponent(p.budget);
   },
 
+  renderMapping(d) {
+    const options = d.columns.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    $("#mapping-msg").textContent = d.message;
+    $("#mapping-fields").innerHTML = d.missing.map((m) => {
+      const label = m.label.charAt(0).toUpperCase() + m.label.slice(1);
+      const nameOnly = m.field === "product_name";
+      return `<div class="map-row" data-field="${m.field}">
+        <label for="map-${m.field}">${esc(label)}</label>
+        <select id="map-${m.field}"><option value="">${nameOnly ? "Choose a column…" : "Not in my file — enter one value →"}</option>${options}</select>
+        ${nameOnly ? "" : `<input type="number" min="0" step="any" aria-label="${esc(label)} for every product" placeholder="e.g. 7">`}
+        ${m.field === "avg_daily_demand" ? `<select id="map-period" aria-label="Sales period"><option value="1">per day</option><option value="7">per week</option><option value="30">per month</option></select>` : ""}
+      </div>`;
+    }).join("");
+    $("#mapping-fields").querySelectorAll(".map-row").forEach((row) => {
+      const sel = row.querySelector("select"), input = row.querySelector("input");
+      if (input) sel.onchange = () => { input.disabled = !!sel.value; if (sel.value) input.value = ""; };
+    });
+    $("#mapping").hidden = false;
+    $("#mapping").scrollIntoView({ behavior: "smooth", block: "center" });
+  },
+
   renderPreview(rows) {
     const cols = [["product_name", "Product", "text"], ["current_stock", "Units in stock", "number"], ["avg_daily_demand", "Daily sales", "number"],
       ["lead_time_days", "Delivery days", "number"], ["unit_cost", "Cost per unit (₹)", "number"], ["safety_stock", "Extra buffer units", "number"],

@@ -94,13 +94,13 @@
       <div class="grid-2">
         <div class="card">
           <div class="opt-head"><span class="opt-icon"><svg class="i"><use href="#i-file"/></svg></span><div><h3>Upload a file</h3><p class="muted">Upload your inventory spreadsheet (CSV).</p></div></div>
-          <label class="drop"><input type="file" id="file-input" accept=".csv,text/csv"><svg class="i lg"><use href="#i-upload"/></svg><span id="file-label">Choose a CSV file</span><small>or drop it here</small></label>
+          <label class="drop"><input type="file" id="file-input" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"><svg class="i lg"><use href="#i-upload"/></svg><span id="file-label">Choose a CSV file</span><small>or drop it here</small></label>
           <div class="actions">
             <button class="btn" id="btn-upload">Upload file</button>
             <a class="btn quiet" href="/api/sample.csv"><svg class="i"><use href="#i-download"/></svg>Sample file</a>
             <button class="btn quiet" id="btn-sample">Use demo data</button>
           </div>
-          <p class="help">Needed columns: product_name, current_stock, avg_daily_demand, lead_time_days, unit_cost. Optional: sku, category, supplier, safety_stock, demand_std, incoming_stock, backorders.</p>
+          <p class="help">Most inventory exports and daily sales histories work: any column names, separators or number formats. For each product we need its name or code, stock, sales, supplier delivery time and unit cost. If one is missing, we'll ask you.</p>
         </div>
         <div class="card">
           <div class="opt-head"><span class="opt-icon"><svg class="i"><use href="#i-spark"/></svg></span><div><h3>Describe your stock</h3><p class="muted">Tell us about your products. We'll turn it into a table you can check.</p></div></div>
@@ -109,6 +109,12 @@
           <div class="actions"><button class="btn" id="btn-parse">Check my inventory</button></div>
           <p class="ai-off note" hidden>AI questions are unavailable until the assistant is connected.</p>
         </div>
+      </div>
+      <div id="mapping" class="card preview" hidden>
+        <h3>Help us read your file</h3>
+        <p class="muted" id="mapping-msg"></p>
+        <div id="mapping-fields" class="map-fields"></div>
+        <div class="actions"><button class="btn" id="btn-mapping">Analyze my file</button><button class="btn quiet" id="btn-mapping-cancel">Cancel</button></div>
       </div>
       <div id="preview" class="card preview" hidden>
         <h3>Check these details before saving</h3>

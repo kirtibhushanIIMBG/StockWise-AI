@@ -8,7 +8,11 @@ const API = {
       throw new Error("We couldn't reach StockWise. Please check that the app is running.");
     }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.ok === false) throw new Error(data.message || "Something went wrong. Please try again.");
+    if (!res.ok || data.ok === false) {
+      const err = new Error(data.message || "Something went wrong. Please try again.");
+      err.data = data;  // e.g. needs_input: which columns we couldn't find
+      throw err;
+    }
     return data;
   },
   json(path, body) {
@@ -17,7 +21,12 @@ const API = {
   health: () => API.call("/api/health"),
   inventory: () => API.call("/api/inventory"),
   sample: () => API.call("/api/sample", { method: "POST" }),
-  upload(file) { const fd = new FormData(); fd.append("file", file); return API.call("/api/upload", { method: "POST", body: fd }); },
+  upload(file, extra = {}) {
+    const fd = new FormData();
+    fd.append("file", file);
+    for (const [k, v] of Object.entries(extra)) fd.append(k, typeof v === "object" ? JSON.stringify(v) : v);
+    return API.call("/api/upload", { method: "POST", body: fd });
+  },
   parse: (text) => API.json("/api/parse-inventory", { text }),
   cancel: () => API.call("/api/cancel-inventory", { method: "POST" }),
   confirm: (items, apply_default_buffer) => API.json("/api/confirm-inventory", { items, apply_default_buffer }),

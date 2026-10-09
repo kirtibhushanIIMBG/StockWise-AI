@@ -46,7 +46,16 @@ stockwise-ai/
 Python 3.11+ · FastAPI · LangChain 1.x (`create_agent`) · LangGraph 1.x (`StateGraph`, `interrupt`, `InMemorySaver`) · `langchain-openrouter` / `langchain-anthropic` (Claude) · Pandas · Pydantic v2 · pytest · vanilla HTML/CSS/JS (no build step, no chart library; bar charts are drawn with CSS).
 
 ## Data-processing workflow
-1. **CSV upload.** Pandas reads the file. Column names are normalised and common aliases are accepted. Every row is validated by Pydantic: required fields must be present and numbers must not be negative. Duplicate SKUs are skipped and reported.
+1. **CSV upload: almost any inventory CSV** (`data_processing.py`).
+   - **Reading.** Any separator (`,` `;` tab `|`), UTF-8/BOM or Windows encodings, and title lines above the header (the header row is detected). Numbers written like `₹1,20,889`, `1.250,50` (semicolon files), `1,200 units`, `2 weeks` or `N/A` are understood. Excel files get a "save as CSV" message.
+   - **Columns.** Exact names are matched first, then keyword rules: `Qty on Hand`/`SOH`/`Inventory Level` → stock; `Weekly Sales` → daily sales ÷ 7; `Lead Time (weeks)` → days × 7; `Vendor` → supplier; `std_daily_demand` → variability. Holding and reorder costs are never taken as the unit cost, and text columns are never read as numbers. After every upload the user sees **"How we read your file"**, listing each renamed or converted column.
+   - **File shapes.**
+     - One row per product.
+     - One row per product per warehouse: stock and sales are added up.
+     - **A dated sales history:** average daily sales = total sales ÷ days covered (a day with no row counts as zero sales); variability = day-to-day spread; stock = each location's latest figure, added up.
+     - Cross-check: on the reference repo's raw 10 MB history (109,400 rows), this gives exactly the repo's own processed values (618.33/day, σ 153.03 for P001).
+   - **Missing required column.** The user is asked to pick the matching column or enter one value for every product, which is then labelled "entered by you". Values are never guessed.
+   - **Validation.** Every row is validated by Pydantic (required fields present, no negatives). Bad rows and duplicate SKUs are skipped and reported. The limits are 25 MB and 5,000 products.
 2. **Plain-English description.** Claude extracts only the values the user stated, using structured output. Missing essentials are flagged instead of being guessed, and repeated mentions of the same product are merged. Products that already exist are marked as updates. An **editable preview** is shown, and nothing is saved until the user clicks *Save to my inventory*. This rule is enforced by the LangGraph entry workflow's `interrupt()` step (see below).
 3. **Retrieval.** Inventory is structured data, so it is filtered and aggregated with Pandas/Python. **No embeddings or vector database are used.** For numeric tables they would add complexity and reduce accuracy. Supplier-contract and policy documents could later use document chunking with embedding retrieval (see Future improvements).
 4. **Prompt size.** Agent tools return counts and totals over all products, but list at most the 10 most urgent per group (`tools.TOP`). With 2,000 products, a risk check sends about 4k tokens instead of about 139k.
@@ -178,9 +187,9 @@ Without a key, the dashboard, upload, planner, scenarios and export all still wo
 
 ## Tests
 ```bash
-cd back-end && ~/.venvs/stockwise/bin/python -m pytest -q tests     # 40 passed
+cd back-end && ~/.venvs/stockwise/bin/python -m pytest -q tests     # 52 passed
 ```
-These cover all mandatory demonstration scenarios 1–4 and 7 (exact expected numbers), zero demand, default/statistical safety stock, excess stock, incoming/backorders, deterministic priority, strict budget enforcement across many budgets, partial allocation, budget comparison, NL extraction with a **mocked** model (scenario 5, missing-value flagging, de-duplication, update detection), CSV upload/validation, negative rejection, duplicate SKUs, session isolation, confirmation validation, honest "AI unavailable" behaviour, real tool registration plus invocation through `create_agent` with a fake model, the 5-tool limit (a 6th call is blocked and the model still answers), and a runaway model stopping without showing the library's limit message.
+`test_csv_formats.py` covers one deliberately different CSV per case: semicolon file with BOM and decimal commas, tab-separated Windows-encoded file with title lines, weekly sales and lead time in weeks, sales history across stores, per-warehouse file, analytics export with text columns, messy numbers, codes without names, Excel file, a missing column (asked for, never guessed), and a retail-forecasting-style dataset through the API. The other tests cover all mandatory demonstration scenarios 1–4 and 7 (exact expected numbers), zero demand, default/statistical safety stock, excess stock, incoming/backorders, deterministic priority, strict budget enforcement across many budgets, partial allocation, budget comparison, NL extraction with a **mocked** model (scenario 5, missing-value flagging, de-duplication, update detection), CSV upload/validation, negative rejection, duplicate SKUs, session isolation, confirmation validation, honest "AI unavailable" behaviour, real tool registration plus invocation through `create_agent` with a fake model, the 5-tool limit (a 6th call is blocked and the model still answers), and a runaway model stopping without showing the library's limit message.
 
 LangGraph tests (`test_graph.py`, mocked models) cover:
 - number grounding (accepted and flagged figures);
@@ -189,7 +198,7 @@ LangGraph tests (`test_graph.py`, mocked models) cover:
 
 | Category | Status |
 |---|---|
-| Automated tests (deterministic + mocked model) | ✅ 40/40 passed |
+| Automated tests (deterministic + mocked model) | ✅ 52/52 passed |
 | Live AI tests via OpenRouter, `openrouter/free` (2026-10-09) | ✅ Passed: multi-tool question, follow-up using chat memory, lead time 5→8 days (Scenario 7), Shampoo extraction + confirm (Scenario 5), vague text with every figure flagged missing and none invented (Scenario 6). All chat answers passed the number check. |
 | Live AI tests via OpenRouter, `anthropic/claude-sonnet-5.5` | ✅ Passed: two multi-tool questions with verified figures; the remaining checks stopped when the account ran out of credit |
 

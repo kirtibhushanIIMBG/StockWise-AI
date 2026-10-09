@@ -4,17 +4,18 @@ Run:  uvicorn main:app --reload   (from the back-end folder)
 """
 import csv
 import io
+import json
 import logging
 import uuid
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from langgraph.types import Command
 
 import config
 import graph
-from data_processing import DataError, load_csv_path, parse_csv
+from data_processing import REQUIRED, DataError, NeedsInput, load_csv_path, parse_csv
 from explanation_engine import explain_plan, explain_product
 from inventory_engine import analyze_all, summarize
 from procurement_engine import compare_budgets, compare_lead_time, purchase_plan
@@ -44,8 +45,8 @@ async def session_cookie(request: Request, call_next):
     return resp
 
 
-def err(msg: str, code: int = 400):
-    return JSONResponse({"ok": False, "message": msg}, status_code=code)
+def err(msg: str, code: int = 400, **extra):
+    return JSONResponse({"ok": False, "message": msg, **extra}, status_code=code)
 
 
 def inventory_payload(sid: str) -> dict:
@@ -78,17 +79,32 @@ def sample_csv():
 
 
 @app.post("/api/upload")
-async def upload(request: Request, file: UploadFile = File(...)):
+async def upload(request: Request, file: UploadFile = File(...), mapping: str = Form("{}"),
+                 defaults: str = Form("{}"), demand_period: float = Form(1)):
+    """mapping {field: column header} and defaults {field: number} come from the "help us read
+    your file" form, shown when a required column can't be found automatically."""
     content = await file.read()
-    if len(content) > 2_000_000:
-        return err("This file is too large. Please upload a file under 2 MB.")
+    if len(content) > 25_000_000:
+        return err("This file is too large. Please upload a file under 25 MB.")
     try:
-        items, warnings = parse_csv(content)
+        mapping, defaults = json.loads(mapping), json.loads(defaults)
+        if not (isinstance(mapping, dict) and isinstance(defaults, dict)) or demand_period <= 0:
+            raise ValueError
+        defaults = {k: float(v) for k, v in defaults.items()}
+        if any(v < 0 for v in defaults.values()):
+            raise ValueError
+    except (ValueError, TypeError):
+        return err("Please enter numbers of zero or more.")
+    try:
+        items, warnings, notes = parse_csv(content, mapping, defaults, demand_period)
+    except NeedsInput as e:
+        return err(str(e), 422, needs_input=True, columns=e.columns,
+                   missing=[{"field": f, "label": REQUIRED[f]} for f in e.missing])
     except DataError as e:
         log.warning("upload failed: %s", e)
         return err(str(e))
     store.set_items(request.state.sid, items, "upload")
-    return {**inventory_payload(request.state.sid), "warnings": warnings, "loaded": len(items)}
+    return {**inventory_payload(request.state.sid), "warnings": warnings, "notes": notes, "loaded": len(items)}
 
 
 def session_ctx(sid: str) -> graph.Ctx:

@@ -35,8 +35,10 @@ def test_upload_valid_and_session_isolation():
 def test_upload_rejects_missing_columns_and_negatives():
     c = client()
     r = c.post("/api/upload", files={"file": ("x.csv", io.BytesIO(b"name,stock\nA,1\n"), "text/csv")})
-    msg = r.json()["message"]  # names exactly what is missing, in plain words
-    assert r.status_code == 400 and "average daily sales" in msg and "supplier delivery time" in msg and "product name" not in msg
+    d = r.json()  # asks for exactly what is missing, in plain words, and offers the file's columns
+    assert r.status_code == 422 and d["needs_input"] and d["columns"] == ["name", "stock"]
+    assert [m["field"] for m in d["missing"]] == ["avg_daily_demand", "lead_time_days", "unit_cost"]
+    assert "average daily sales" in d["message"] and "product name" not in d["message"]
     bad = b"product_name,current_stock,avg_daily_demand,lead_time_days,unit_cost\nA,-5,1,1,1\n"
     assert c.post("/api/upload", files={"file": ("x.csv", io.BytesIO(bad), "text/csv")}).status_code == 400
 

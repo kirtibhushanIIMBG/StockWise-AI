@@ -6,8 +6,24 @@ function busy(btn, on, label) {
   if (on) { btn.dataset.label = btn.textContent; btn.textContent = label; btn.disabled = true; btn.classList.add("loading"); }
   else { btn.textContent = btn.dataset.label; btn.disabled = false; btn.classList.remove("loading"); }
 }
-function showMsg(text, ok = true) {
-  const m = $("#add-msg"); m.hidden = false; m.className = "msg " + (ok ? "ok" : "bad"); m.textContent = text;
+function showMsg(text, ok = true, list = []) {
+  const m = $("#add-msg"); m.hidden = false; m.className = "msg " + (ok ? "ok" : "bad");
+  m.innerHTML = esc(text) + (list.length ? `<ul>${list.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : "");
+}
+async function uploadFile(btn, extra = {}) {
+  const f = $("#file-input").files[0];
+  if (!f) return showMsg("Please choose a CSV file first.", false);
+  busy(btn, true, "Reading your file");
+  try {
+    const d = await API.upload(f, extra);
+    $("#mapping").hidden = true;
+    Dashboard.render(d); refreshPlan();
+    const skipped = d.warnings.length ? " Some rows were skipped: " + d.warnings.join(" ") : "";
+    showMsg(`Loaded ${d.loaded.toLocaleString("en-IN")} products.${skipped}` + (d.notes.length ? " How we read your file:" : ""), true, d.notes);
+  } catch (e) {
+    if (e.data?.needs_input) { $("#add-msg").hidden = true; Dashboard.renderMapping(e.data); }
+    else showMsg(e.message, false);
+  } finally { busy(btn, false); }
 }
 async function refreshPlan() {
   try { Dashboard.renderPlan(await API.plan(Number($("#budget").value) || 0)); } catch (e) { /* plan is optional on load */ }
@@ -34,16 +50,18 @@ async function init() {
   $("#see-risk").onclick = () => Dashboard.showUrgent();
   $("#file-input").onchange = (e) => $("#file-label").textContent = e.target.files[0]?.name || "Choose a CSV file…";
 
-  $("#btn-upload").onclick = async (ev) => {
-    const f = $("#file-input").files[0];
-    if (!f) return showMsg("Please choose a CSV file first.", false);
-    busy(ev.target, true, "Reading your file");
-    try {
-      const d = await API.upload(f);
-      Dashboard.render(d); refreshPlan();
-      showMsg(`Loaded ${d.loaded} products.` + (d.warnings.length ? " Some rows were skipped: " + d.warnings.join(" ") : ""));
-    } catch (e) { showMsg(e.message, false); } finally { busy(ev.target, false); }
+  $("#btn-upload").onclick = (ev) => uploadFile(ev.target);
+  $("#btn-mapping").onclick = (ev) => {
+    const mapping = {}, defaults = {};
+    for (const row of document.querySelectorAll("#mapping-fields .map-row")) {
+      const f = row.dataset.field, col = row.querySelector("select").value, val = row.querySelector("input")?.value;
+      if (col) mapping[f] = col;
+      else if (val !== undefined && val !== "") defaults[f] = Number(val);
+      else return showMsg(`Please choose a column or enter a value for “${row.querySelector("label").textContent}”.`, false);
+    }
+    uploadFile(ev.target, { mapping, defaults, demand_period: $("#map-period")?.value || 1 });
   };
+  $("#btn-mapping-cancel").onclick = () => { $("#mapping").hidden = true; showMsg("Nothing was changed."); };
 
   $("#btn-sample").onclick = async () => {
     const d = await API.sample(); Dashboard.render(d); refreshPlan(); showMsg("Demo data loaded.");
