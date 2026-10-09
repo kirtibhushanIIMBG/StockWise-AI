@@ -49,7 +49,7 @@ Python 3.11+ · FastAPI · LangChain 1.x (`create_agent`) · LangGraph 1.x (`Sta
 1. **CSV upload.** Pandas reads the file. Column names are normalised and common aliases are accepted. Every row is validated by Pydantic: required fields must be present and numbers must not be negative. Duplicate SKUs are skipped and reported.
 2. **Plain-English description.** Claude extracts only the values the user stated, using structured output. Missing essentials are flagged instead of being guessed, and repeated mentions of the same product are merged. Products that already exist are marked as updates. An **editable preview** is shown, and nothing is saved until the user clicks *Save to my inventory*. This rule is enforced by the LangGraph entry workflow's `interrupt()` step (see below).
 3. **Retrieval.** Inventory is structured data, so it is filtered and aggregated with Pandas/Python. **No embeddings or vector database are used.** For numeric tables they would add complexity and reduce accuracy. Supplier-contract and policy documents could later use document chunking with embedding retrieval (see Future improvements).
-4. **Prompt size.** Agent tools return compact summaries or selected rows, never the whole dataset.
+4. **Prompt size.** Agent tools return counts and totals over all products, but list at most the 10 most urgent per group (`tools.TOP`). With 2,000 products, a risk check sends about 4k tokens instead of about 139k.
 
 ## Inventory calculation method (`inventory_engine.py`)
 | Metric | Formula |
@@ -199,7 +199,7 @@ LangGraph tests (`test_graph.py`, mocked models) cover:
 - Budget allocation is greedy, not optimal. Minimum order quantities and supplier discounts are not modelled.
 - Free models vary by request: answers are correct and checked, but they follow the answer format less strictly than Claude and can take 10–60 s.
 - The number check is a heuristic. It catches invented figures, but it cannot tell whether a figure that does appear in the data is used in the right place.
-- Tested for roughly 20–500 SKUs.
+- Tested with up to 2,000 products: upload takes about 0.1 s and the dashboard data is about 3 MB. AI tools send counts plus the 10 most urgent products per group, never the full list.
 
 ## Future improvements
 Supplier-agreement retrieval (chunking + embeddings for MOQ and contract terms), demand forecasting, MOQ/pack-size constraints, multi-warehouse support, persistent storage with login, and an optimisation-based allocator (ILP).

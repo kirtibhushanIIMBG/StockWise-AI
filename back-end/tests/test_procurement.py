@@ -28,3 +28,16 @@ def test_lead_time_scenario_preserves_baseline():
     c = compare_lead_time(items, "Product A", 8)
     assert c["before"]["reorder_point"] == 60 and c["after"]["reorder_point"] == 90
     assert c["after"]["suggested_qty"] == 140 and items[0]["lead_time_days"] == 5
+
+
+def test_tool_output_stays_small_for_large_inventories():
+    import json
+    from tools import TOP, build_tools
+    big = [dict(sku=f"S{i:04}", product_name=f"P{i}", current_stock=i % 7, avg_daily_demand=5, lead_time_days=6,
+                unit_cost=10, safety_stock=5) for i in range(2000)]
+    tools = {t.name: t for t in build_tools(lambda: big)}
+    risks = tools["identify_inventory_risks"].invoke({"within_days": 5})
+    assert risks["Critical"]["count"] > TOP and len(risks["Critical"]["products"]) == TOP  # count covers all
+    assert len(json.dumps(risks)) < 20_000
+    rep = tools["calculate_replenishment"].invoke({})
+    assert rep["items"]["count"] == 2000 and len(rep["items"]["products"]) == TOP and rep["total_cost"] > 0

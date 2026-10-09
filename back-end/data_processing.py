@@ -8,18 +8,27 @@ from pydantic import ValidationError
 
 from schemas import InventoryItem
 
-REQUIRED = ["product_name", "current_stock", "avg_daily_demand", "lead_time_days", "unit_cost"]
+# Required fields and how we describe them to the user (also used by the "Describe your stock" preview).
+REQUIRED = {
+    "product_name": "product name", "current_stock": "units in stock",
+    "avg_daily_demand": "average daily sales", "lead_time_days": "supplier delivery time (days)",
+    "unit_cost": "cost per unit (₹)",
+}
 ALIASES = {
     "product": "product_name", "name": "product_name", "item": "product_name",
     "stock": "current_stock", "on_hand": "current_stock", "quantity": "current_stock",
     "daily_demand": "avg_daily_demand", "demand": "avg_daily_demand", "daily_sales": "avg_daily_demand",
+    "average_daily_demand": "avg_daily_demand", "average_daily_sales": "avg_daily_demand",
+    "avg_daily_sales": "avg_daily_demand",
+    "daily_demand_stddev": "demand_std", "demand_stddev": "demand_std", "demand_std_dev": "demand_std",
     "lead_time": "lead_time_days", "cost": "unit_cost", "purchase_cost": "unit_cost",
-    "price": "selling_price", "incoming": "incoming_stock", "sku_id": "sku", "product_id": "sku",
+    "price": "selling_price", "unit_price": "selling_price", "sale_price": "selling_price",
+    "incoming": "incoming_stock", "sku_id": "sku", "product_id": "sku",
 }
 
 
 class DataError(ValueError):
-    pass
+    """Raised with a message that is safe to show to the user."""
 
 
 def make_sku(name: str, taken: set) -> str:
@@ -55,18 +64,20 @@ def parse_csv(content: bytes) -> tuple[list[dict], list[str]]:
     try:
         df = pd.read_csv(io.BytesIO(content))
     except Exception as e:  # noqa: BLE001
-        raise DataError("unreadable") from e
+        raise DataError("We couldn't read this file. Please save it as a CSV or use our sample file.") from e
     df.columns = [re.sub(r"\W+", "_", str(c).strip().lower()).strip("_") for c in df.columns]
     df = df.rename(columns={c: ALIASES.get(c, c) for c in df.columns})
     missing = [c for c in REQUIRED if c not in df.columns]
     if missing:
-        raise DataError(f"missing columns: {', '.join(missing)}")
+        raise DataError("Your file is missing a column for: "
+                        + ", ".join(f"{REQUIRED[c]} (name it “{c}”)" for c in missing)
+                        + ". Download our sample file to see the expected columns.")
     if df.empty:
-        raise DataError("empty file")
+        raise DataError("This file has column headings but no products.")
     df = df.astype(object).where(pd.notna(df), None)
     items, errors = validate_records(df.to_dict(orient="records"))
     if not items:
-        raise DataError("no valid rows; " + " ".join(errors[:3]))
+        raise DataError("None of the rows could be used. " + " ".join(errors[:3]))
     return items, errors
 
 

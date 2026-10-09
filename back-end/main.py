@@ -86,7 +86,7 @@ async def upload(request: Request, file: UploadFile = File(...)):
         items, warnings = parse_csv(content)
     except DataError as e:
         log.warning("upload failed: %s", e)
-        return err("We couldn't read this file. Please check the format or use our sample file.")
+        return err(str(e))
     store.set_items(request.state.sid, items, "upload")
     return {**inventory_payload(request.state.sid), "warnings": warnings, "loaded": len(items)}
 

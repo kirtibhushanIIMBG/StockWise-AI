@@ -35,9 +35,20 @@ def test_upload_valid_and_session_isolation():
 def test_upload_rejects_missing_columns_and_negatives():
     c = client()
     r = c.post("/api/upload", files={"file": ("x.csv", io.BytesIO(b"name,stock\nA,1\n"), "text/csv")})
-    assert r.status_code == 400 and "couldn't read" in r.json()["message"]
+    msg = r.json()["message"]  # names exactly what is missing, in plain words
+    assert r.status_code == 400 and "average daily sales" in msg and "supplier delivery time" in msg and "product name" not in msg
     bad = b"product_name,current_stock,avg_daily_demand,lead_time_days,unit_cost\nA,-5,1,1,1\n"
     assert c.post("/api/upload", files={"file": ("x.csv", io.BytesIO(bad), "text/csv")}).status_code == 400
+
+
+def test_upload_accepts_common_column_names():
+    # Headers from a real user file: average_daily_demand was rejected before.
+    csvb = (b"sku,product_name,category,supplier,current_stock,average_daily_demand,daily_demand_stddev,"
+            b"lead_time_days,incoming_stock,backorders,unit_cost,unit_price,safety_stock\n"
+            b"SKU-0001,Product A,FMCG,FreshFlow,20,10,3,5,0,0,100,160,10\n")
+    r = client().post("/api/upload", files={"file": ("x.csv", io.BytesIO(csvb), "text/csv")}).json()
+    p = r["products"][0]
+    assert r["loaded"] == 1 and p["avg_daily_demand"] == 10 and p["suggested_qty"] == 110
 
 
 def test_duplicate_sku_skipped():

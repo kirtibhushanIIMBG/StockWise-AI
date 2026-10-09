@@ -8,14 +8,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from agent import get_model
-from data_processing import make_sku
-
-ESSENTIAL = ["product_name", "current_stock", "avg_daily_demand", "lead_time_days", "unit_cost"]
-LABELS = {
-    "product_name": "product name", "current_stock": "units in stock",
-    "avg_daily_demand": "average daily sales", "lead_time_days": "supplier delivery time (days)",
-    "unit_cost": "cost per unit (₹)",
-}
+from data_processing import REQUIRED, make_sku
 
 
 class ExtractedProduct(BaseModel):
@@ -62,9 +55,9 @@ def build_preview(result: ExtractionResult, existing_skus: set | None = None,
         if not sku:
             sku = make_sku(name or "ITEM", taken)
         taken.add(sku)
-        missing = [f for f in ESSENTIAL if d.get(f) is None or (f == "product_name" and not name)]
+        missing = [f for f in REQUIRED if d.get(f) is None or (f == "product_name" and not name)]
         rows.append({
             **d, "sku": sku, "is_update": is_update,
-            "missing": missing, "missing_labels": [LABELS[f] for f in missing],
+            "missing": missing, "missing_labels": [REQUIRED[f] for f in missing],
         })
     return rows
