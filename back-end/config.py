@@ -9,10 +9,11 @@ load_dotenv(ROOT.parent / ".env")
 load_dotenv(ROOT / ".env")
 
 # OpenRouter is used when its key is set; otherwise Anthropic directly.
+# "openrouter/free" lets OpenRouter pick an available free model that supports tool calling.
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
 AI_MODEL = (os.getenv("AI_MODEL", "").strip()
-            or ("anthropic/claude-sonnet-5.5" if OPENROUTER_API_KEY else "claude-sonnet-5-5"))
+            or ("openrouter/free" if OPENROUTER_API_KEY else "claude-sonnet-5-5"))
 
 # Inventory policy defaults
 REVIEW_PERIOD_DAYS = 7

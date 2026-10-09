@@ -160,7 +160,11 @@ cd back-end
 |---|---|
 | `OPENROUTER_API_KEY` | Use Claude through [OpenRouter](https://openrouter.ai) (`langchain-openrouter`). Takes priority if both keys are set. |
 | `ANTHROPIC_API_KEY` | Use Claude directly through Anthropic (`langchain-anthropic`). |
-| `AI_MODEL` | Optional. Defaults to `anthropic/claude-sonnet-5.5` on OpenRouter or `claude-sonnet-5-5` on Anthropic. Any model with tool calling and structured output works. |
+| `AI_MODEL` | Optional. Defaults to `openrouter/free` on OpenRouter or `claude-sonnet-5-5` on Anthropic. Any model with tool calling works. |
+
+**Free models (the OpenRouter default).** `openrouter/free` lets OpenRouter pick, per request, any available free model that supports tool calling. In live tests it used a different model almost every call (Nemotron, Apodex, Cohere North, Liquid LFM and others), and every answer passed the number check.
+- **Limits.** Free models allow 20 requests/minute and **50 requests/day** (1,000/day once $10 of credit has ever been bought). One chat question uses 2–4 requests.
+- **Not Claude.** The original brief asks for Claude. To use it, add OpenRouter credit and set `AI_MODEL=anthropic/claude-sonnet-5.5`. The live test of that model passed too, at about $0.006 per question.
 
 Without a key, the dashboard, upload, planner, scenarios and export all still work, and the AI screens show *"AI questions are unavailable until the assistant is connected."*
 
@@ -186,13 +190,14 @@ LangGraph tests (`test_graph.py`, mocked models) cover:
 | Category | Status |
 |---|---|
 | Automated tests (deterministic + mocked model) | ✅ 40/40 passed |
-| Live AI tests (real Claude calls) | ⚠️ **Not executed.** No `ANTHROPIC_API_KEY` was available in the build environment |
+| Live AI tests via OpenRouter, `openrouter/free` (2026-10-09) | ✅ Passed: multi-tool question, follow-up using chat memory, lead time 5→8 days (Scenario 7), Shampoo extraction + confirm (Scenario 5), vague text with every figure flagged missing and none invented (Scenario 6). All chat answers passed the number check. |
+| Live AI tests via OpenRouter, `anthropic/claude-sonnet-5.5` | ✅ Passed: two multi-tool questions with verified figures; the remaining checks stopped when the account ran out of credit |
 
 ## Limitations
 - Session data is in memory only and is lost on server restart. There is no login or database.
 - Demand is a single average with no seasonality or forecasting model.
 - Budget allocation is greedy, not optimal. Minimum order quantities and supplier discounts are not modelled.
-- Live Claude behaviour (extraction quality and answer wording) still needs to be checked with a real key.
+- Free models vary by request: answers are correct and checked, but they follow the answer format less strictly than Claude and can take 10–60 s.
 - The number check is a heuristic. It catches invented figures, but it cannot tell whether a figure that does appear in the data is used in the right place.
 - Tested for roughly 20–500 SKUs.
 
