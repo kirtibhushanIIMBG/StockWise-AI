@@ -59,7 +59,7 @@ def test_confirm_goes_through_review_step(monkeypatch):
     from language_parser import ExtractedProduct, ExtractionResult
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setattr(language_parser, "extract", lambda text, llm=None: ExtractionResult(
-        intent="inventory_data", products=[ExtractedProduct(product_name="Shampoo", current_stock=50,
+        products=[ExtractedProduct(product_name="Shampoo", current_stock=50,
                                                             avg_daily_demand=8, lead_time_days=6, unit_cost=120)]))
     c = client()
     assert c.post("/api/confirm-inventory", json={"items": []}).status_code == 409  # nothing pending

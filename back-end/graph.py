@@ -161,7 +161,6 @@ EDITABLE = {"sku", "product_name", "category", "supplier", "current_stock", "avg
 
 class EntryState(TypedDict, total=False):
     text: str
-    intent: str
     rows: list[dict]      # editable preview shown to the user
     message: str
     decision: dict        # what the user sent back from the review step
@@ -185,12 +184,10 @@ def _vague_message(text: str, items: list[dict]) -> str:
 def extract(state: EntryState, runtime: Runtime[Ctx]) -> dict:
     items = runtime.context.get_items()
     result = lp.extract(state["text"], llm=runtime.context.model)
-    preview = lp.build_preview(result, {i["sku"] for i in items},
-                               {i["product_name"].lower(): i["sku"] for i in items})
-    if not preview["rows"]:
-        return {"rows": [], "intent": preview["intent"], "status": "empty",
-                "message": _vague_message(state["text"], items)}
-    return {"rows": preview["rows"], "intent": preview["intent"], "errors": []}
+    rows = lp.build_preview(result, {i["sku"] for i in items}, {i["product_name"].lower(): i["sku"] for i in items})
+    if not rows:
+        return {"rows": [], "status": "empty", "message": _vague_message(state["text"], items)}
+    return {"rows": rows, "errors": []}
 
 
 def review(state: EntryState) -> dict:
@@ -208,10 +205,7 @@ def validate(state: EntryState) -> dict:
               for r in rows if r.get("safety_stock") in (None, "") and not d.get("apply_default_buffer", True)]
     items, problems = validate_records(rows) if rows else ([], ["There are no products to save."])
     errors += problems
-    if errors:  # keep the user's edits and go back to the review step
-        merged = [{**old, **new} for old, new in zip(state["rows"], rows)] or state["rows"]
-        return {"errors": errors, "rows": merged, "valid": []}
-    return {"errors": [], "valid": items}
+    return {"errors": errors, "valid": items}  # errors → back to the review step
 
 
 def commit(state: EntryState, runtime: Runtime[Ctx]) -> dict:

@@ -1,6 +1,7 @@
 """CSV loading and validation. Structured tables are filtered with pandas — no embeddings."""
 import io
 import re
+from pathlib import Path
 
 import pandas as pd
 from pydantic import ValidationError
@@ -33,7 +34,7 @@ def validate_records(records: list[dict]) -> tuple[list[dict], list[str]]:
     """Validate rows; returns (clean_items, errors). Duplicate SKUs are rejected."""
     items, errors, seen = [], [], set()
     for idx, raw in enumerate(records, start=1):
-        rec = {k: v for k, v in raw.items() if v is not None and not (isinstance(v, float) and pd.isna(v)) and v != ""}
+        rec = {k: v for k, v in raw.items() if v not in (None, "")}
         if not rec.get("sku"):
             rec["sku"] = make_sku(str(rec.get("product_name", "ITEM")), seen)
         try:
@@ -70,5 +71,4 @@ def parse_csv(content: bytes) -> tuple[list[dict], list[str]]:
 
 
 def load_csv_path(path) -> list[dict]:
-    with open(path, "rb") as f:
-        return parse_csv(f.read())[0]
+    return parse_csv(Path(path).read_bytes())[0]

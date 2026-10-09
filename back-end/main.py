@@ -5,17 +5,16 @@ Run:  uvicorn main:app --reload   (from the back-end folder)
 import csv
 import io
 import logging
-import math
 import uuid
 
 from fastapi import FastAPI, File, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from langgraph.types import Command
 
 import config
 import graph
-from data_processing import DataError, parse_csv
+from data_processing import DataError, load_csv_path, parse_csv
 from explanation_engine import explain_plan, explain_product
 from inventory_engine import analyze_all, summarize
 from procurement_engine import compare_budgets, compare_lead_time, purchase_plan
@@ -37,7 +36,7 @@ async def session_cookie(request: Request, call_next):
     sid = request.cookies.get(COOKIE)
     new = not sid or len(sid) != 32
     if new:
-        sid = store.new_id()
+        sid = uuid.uuid4().hex
     request.state.sid = sid
     resp = await call_next(request)
     if new:
@@ -45,8 +44,8 @@ async def session_cookie(request: Request, call_next):
     return resp
 
 
-def err(msg: str, code: int = 400, **extra):
-    return JSONResponse({"ok": False, "message": msg, **extra}, status_code=code)
+def err(msg: str, code: int = 400):
+    return JSONResponse({"ok": False, "message": msg}, status_code=code)
 
 
 def inventory_payload(sid: str) -> dict:
@@ -58,8 +57,7 @@ def inventory_payload(sid: str) -> dict:
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "ai_available": config.ai_available(),
-            "ai_message": None if config.ai_available() else AI_OFF}
+    return {"ok": True, "ai_available": config.ai_available()}
 
 
 @app.get("/api/inventory")
@@ -70,7 +68,6 @@ def inventory(request: Request):
 @app.post("/api/sample")
 @app.get("/api/sample")
 def load_sample(request: Request):
-    from data_processing import load_csv_path
     store.set_items(request.state.sid, load_csv_path(config.SAMPLE_CSV), "sample")
     return inventory_payload(request.state.sid)
 
@@ -89,7 +86,7 @@ async def upload(request: Request, file: UploadFile = File(...)):
         items, warnings = parse_csv(content)
     except DataError as e:
         log.warning("upload failed: %s", e)
-        return err("We couldn't read this file. Please check the format or use our sample file.", detail=str(e))
+        return err("We couldn't read this file. Please check the format or use our sample file.")
     store.set_items(request.state.sid, items, "upload")
     return {**inventory_payload(request.state.sid), "warnings": warnings, "loaded": len(items)}
 
@@ -114,11 +111,9 @@ def parse_inventory(request: Request, body: ParseRequest):
     review = graph.pending_review(result)
     if review is None:  # vague text: nothing to confirm (Scenario 6)
         store.set_pending(sid, None)
-        return {"ok": True, "intent": result.get("intent"), "rows": [], "complete": False, "message": result["message"]}
+        return {"ok": True, "rows": [], "message": result["message"]}
     store.set_pending(sid, thread_id)
-    rows = review["rows"]
-    return {"ok": True, "intent": result.get("intent"), "rows": rows,
-            "complete": all(not r["missing"] for r in rows)}
+    return {"ok": True, "rows": review["rows"]}
 
 
 @app.post("/api/confirm-inventory")
@@ -182,16 +177,13 @@ def ask(request: Request, body: AskRequest):
     except Exception:  # noqa: BLE001
         log.exception("agent failed")
         return err(AI_DOWN, 503)
-    return {"ok": True, "answer": res["answer"], "tools_used": res.get("tools_used", []),
-            "verified": res.get("verified", False)}
+    return {"ok": True, "answer": res["answer"], "tools_used": res["tools_used"], "verified": res["verified"]}
 
 
 @app.get("/api/export")
 def export(request: Request, budget: float | None = None):
-    items = store.get_items(request.state.sid)
-    if budget is None or math.isnan(budget) or budget < 0:
-        budget = float("inf")
-    p = purchase_plan(items, budget if budget != float("inf") else 1e15)
+    # No (or invalid) budget = export everything recommended.
+    p = purchase_plan(store.get_items(request.state.sid), budget if budget is not None and budget >= 0 else 1e15)
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Priority", "SKU", "Product", "Category", "Stock Status", "Recommended Units",
@@ -199,9 +191,8 @@ def export(request: Request, budget: float | None = None):
     for l in p["lines"]:
         w.writerow([l["priority"], l["sku"], l["product_name"], l["category"], l["status"],
                     l["recommended_qty"], l["buy_qty"], l["unit_cost"], l["cost"], l["unfunded_qty"], l["funding"]])
-    buf.seek(0)
-    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
-                             headers={"Content-Disposition": "attachment; filename=stockwise_purchase_plan.csv"})
+    return Response(buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=stockwise_purchase_plan.csv"})
 
 
 app.mount("/", StaticFiles(directory=config.FRONTEND_DIR, html=True), name="front-end")

@@ -11,6 +11,7 @@ Classification priority (first match wins):
 The "needs_reorder" flag is computed independently of the label.
 """
 import math
+from collections import Counter
 from decimal import ROUND_HALF_UP, Decimal
 
 import config
@@ -20,10 +21,6 @@ def money(x) -> float:
     return float(Decimal(str(x)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
-def inventory_position(stock: float, incoming: float = 0, backorders: float = 0) -> float:
-    return stock + incoming - backorders
-
-
 def coverage_days(stock: float, demand: float):
     """Days current stock will last. None means 'no demand' (infinite coverage)."""
     if demand <= 0:
@@ -31,27 +28,16 @@ def coverage_days(stock: float, demand: float):
     return round(stock / demand, 2)
 
 
-def safety_stock(demand: float, lead_time: float, supplied=None, demand_std=None,
-                 z: float = config.SERVICE_Z, buffer_days: int = config.DEFAULT_BUFFER_DAYS):
+def safety_stock(demand: float, lead_time: float, supplied=None, demand_std=None):
     """Return (safety_stock, method)."""
     if supplied is not None:
         return float(supplied), "supplied"
-    if demand_std is not None and demand_std > 0:
-        return float(math.ceil(z * demand_std * math.sqrt(lead_time))), "statistical"
-    return float(math.ceil(buffer_days * demand)), "default_buffer"
+    if demand_std:
+        return float(math.ceil(config.SERVICE_Z * demand_std * math.sqrt(lead_time))), "statistical"
+    return float(math.ceil(config.DEFAULT_BUFFER_DAYS * demand)), "default_buffer"
 
 
-def reorder_point(demand: float, lead_time: float, ss: float) -> float:
-    return demand * lead_time + ss
-
-
-def target_stock(demand: float, lead_time: float, ss: float,
-                 review_period: float = config.REVIEW_PERIOD_DAYS) -> float:
-    return demand * (lead_time + review_period) + ss
-
-
-def analyze_item(item: dict, lead_time_override: float | None = None,
-                 review_period: float = config.REVIEW_PERIOD_DAYS) -> dict:
+def analyze_item(item: dict, lead_time_override: float | None = None) -> dict:
     d = float(item["avg_daily_demand"])
     lt = float(lead_time_override if lead_time_override is not None else item["lead_time_days"])
     stock = float(item["current_stock"])
@@ -60,10 +46,11 @@ def analyze_item(item: dict, lead_time_override: float | None = None,
     cost = float(item["unit_cost"])
 
     ss, ss_method = safety_stock(d, lt, item.get("safety_stock"), item.get("demand_std"))
-    pos = inventory_position(stock, inc, bo)
+    review = config.REVIEW_PERIOD_DAYS
+    pos = stock + inc - bo                       # inventory position
     cov = coverage_days(stock, d)
-    rop = math.ceil(reorder_point(d, lt, ss))
-    tgt = math.ceil(target_stock(d, lt, ss, review_period))
+    rop = math.ceil(d * lt + ss)                 # reorder point
+    tgt = math.ceil(d * (lt + review) + ss)      # target stock
     needs = pos <= rop and (d > 0 or bo > 0)
     qty = int(max(0, math.ceil(tgt - pos))) if needs else 0
 
@@ -102,7 +89,7 @@ def analyze_item(item: dict, lead_time_override: float | None = None,
         "safety_stock_method": ss_method,
         "reorder_point": rop,
         "target_stock": tgt,
-        "review_period_days": review_period,
+        "review_period_days": review,
         "needs_reorder": needs,
         "suggested_qty": qty,
         "estimated_cost": money(qty * cost),
@@ -151,9 +138,7 @@ def analyze_all(items: list[dict], lead_time_overrides: dict | None = None) -> l
 
 
 def summarize(rows: list[dict]) -> dict:
-    counts = {}
-    for r in rows:
-        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    counts = dict(Counter(r["status"] for r in rows))
     reorder = [r for r in rows if r["needs_reorder"]]
     at_risk = [r for r in rows if r["status"] in ("Out of Stock", "Critical")]
     cat_cost = {}

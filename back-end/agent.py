@@ -33,7 +33,7 @@ def get_model():
     from langchain_anthropic import ChatAnthropic
     return ChatAnthropic(model=config.ANTHROPIC_MODEL, api_key=config.ANTHROPIC_API_KEY,
                          temperature=0, timeout=config.AGENT_TIMEOUT_SECONDS,
-                         max_retries=config.AGENT_MAX_RETRIES, max_tokens=1500)
+                         max_retries=config.AGENT_MAX_RETRIES, max_tokens=2000)
 
 
 def build_agent(get_items, tool_log: list, model=None):

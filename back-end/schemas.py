@@ -25,21 +25,6 @@ class InventoryItem(BaseModel):
         return v.strip()
 
 
-class DraftItem(BaseModel):
-    """A record extracted from natural language — fields may be missing."""
-    sku: Optional[str] = None
-    product_name: Optional[str] = None
-    current_stock: Optional[float] = None
-    avg_daily_demand: Optional[float] = None
-    lead_time_days: Optional[float] = None
-    unit_cost: Optional[float] = None
-    safety_stock: Optional[float] = None
-    incoming_stock: Optional[float] = None
-    backorders: Optional[float] = None
-    category: Optional[str] = None
-    supplier: Optional[str] = None
-
-
 class ParseRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
 

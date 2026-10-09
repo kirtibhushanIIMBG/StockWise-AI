@@ -1,7 +1,6 @@
 """In-memory, per-browser session store. Data is temporary and lost on server restart."""
 import copy
 import threading
-import uuid
 
 import config
 from data_processing import load_csv_path
@@ -11,9 +10,6 @@ class SessionStore:
     def __init__(self):
         self._data: dict[str, dict] = {}
         self._lock = threading.Lock()
-
-    def new_id(self) -> str:
-        return uuid.uuid4().hex
 
     def _ensure(self, sid: str) -> dict:
         if sid not in self._data:

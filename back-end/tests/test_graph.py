@@ -82,7 +82,7 @@ def test_ask_graph_remembers_conversation_per_thread():
 
 
 # ---------------------------------------------------------------- entry graph (human-in-the-loop)
-SHAMPOO = ExtractionResult(intent="inventory_data", products=[ExtractedProduct(
+SHAMPOO = ExtractionResult(products=[ExtractedProduct(
     product_name="Shampoo", current_stock=50, avg_daily_demand=8, lead_time_days=6, unit_cost=120)])
 
 
@@ -122,6 +122,6 @@ def test_entry_graph_invalid_edit_returns_to_review():
 
 def test_entry_graph_vague_text_asks_for_details():
     out = graph.ENTRY_GRAPH.invoke({"text": "We have very little stock of Product A."}, tid(),
-                                   context=entry_ctx([], ExtractionResult(intent="question", products=[])))
+                                   context=entry_ctx([], ExtractionResult(products=[])))
     assert graph.pending_review(out) is None and out["status"] == "empty"
     assert "units in stock" in out["message"] and "Product A" in out["message"]

@@ -7,14 +7,14 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-import config
+from agent import get_model
 from data_processing import make_sku
 
 ESSENTIAL = ["product_name", "current_stock", "avg_daily_demand", "lead_time_days", "unit_cost"]
 LABELS = {
     "product_name": "product name", "current_stock": "units in stock",
     "avg_daily_demand": "average daily sales", "lead_time_days": "supplier delivery time (days)",
-    "unit_cost": "cost per unit (₹)", "safety_stock": "extra buffer units",
+    "unit_cost": "cost per unit (₹)",
 }
 
 
@@ -30,7 +30,6 @@ class ExtractedProduct(BaseModel):
 
 
 class ExtractionResult(BaseModel):
-    intent: str = Field(description="'inventory_data' if the text describes stock facts, 'question' if it only asks something")
     products: list[ExtractedProduct] = Field(default_factory=list)
 
 
@@ -41,21 +40,13 @@ SYSTEM = (
 )
 
 
-def get_llm():
-    from langchain_anthropic import ChatAnthropic
-    return ChatAnthropic(model=config.ANTHROPIC_MODEL, api_key=config.ANTHROPIC_API_KEY,
-                         temperature=0, timeout=config.AGENT_TIMEOUT_SECONDS,
-                         max_retries=config.AGENT_MAX_RETRIES, max_tokens=2000)
-
-
 def extract(text: str, llm=None) -> ExtractionResult:
-    llm = llm or get_llm()
-    structured = llm.with_structured_output(ExtractionResult)
+    structured = (llm or get_model()).with_structured_output(ExtractionResult)
     return structured.invoke([("system", SYSTEM), ("human", text)])
 
 
 def build_preview(result: ExtractionResult, existing_skus: set | None = None,
-                  existing_names: dict | None = None) -> dict:
+                  existing_names: dict | None = None) -> list[dict]:
     """Turn extracted products into editable preview rows with missing fields flagged."""
     existing_names = existing_names or {}
     taken = set(existing_skus or set())
@@ -75,8 +66,5 @@ def build_preview(result: ExtractionResult, existing_skus: set | None = None,
         rows.append({
             **d, "sku": sku, "is_update": is_update,
             "missing": missing, "missing_labels": [LABELS[f] for f in missing],
-            "safety_stock_note": None if d.get("safety_stock") is not None else
-            f"No buffer given — we can apply a default of {config.DEFAULT_BUFFER_DAYS} days of sales if you agree.",
         })
-    return {"intent": result.intent, "rows": rows,
-            "complete": bool(rows) and all(not r["missing"] for r in rows)}
+    return rows

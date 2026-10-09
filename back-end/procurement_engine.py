@@ -2,25 +2,21 @@
 import math
 from decimal import Decimal
 
-from inventory_engine import analyze_all, money, priority_key
+from inventory_engine import analyze_all, money
 
 
-def purchase_plan(items: list[dict], budget: float, lead_time_overrides: dict | None = None) -> dict:
-    rows = [r for r in analyze_all(items, lead_time_overrides) if r["suggested_qty"] > 0]
-    rows.sort(key=priority_key)
+def purchase_plan(items: list[dict], budget: float) -> dict:
+    rows = [r for r in analyze_all(items) if r["suggested_qty"] > 0]  # already in priority order
     remaining = Decimal(str(budget))
     lines = []
-    for r in rows:
+    for priority, r in enumerate(rows, start=1):
         cost = Decimal(str(r["unit_cost"]))
         need = r["suggested_qty"]
-        if cost == 0:
-            buy = need
-        else:
-            buy = min(need, math.floor(remaining / cost))
+        buy = need if cost == 0 else min(need, math.floor(remaining / cost))
         spend = cost * buy
         remaining -= spend
         lines.append({
-            "priority": len(lines) + 1,
+            "priority": priority,
             "sku": r["sku"],
             "product_name": r["product_name"],
             "category": r["category"],
@@ -30,7 +26,6 @@ def purchase_plan(items: list[dict], budget: float, lead_time_overrides: dict | 
             "unit_cost": r["unit_cost"],
             "cost": money(spend),
             "unfunded_qty": int(need - buy),
-            "unfunded_cost": money(cost * (need - buy)),
             "funding": "Full" if buy == need else ("Partial" if buy > 0 else "Not funded"),
         })
     spent = sum(Decimal(str(l["cost"])) for l in lines)
@@ -54,12 +49,12 @@ def purchase_plan(items: list[dict], budget: float, lead_time_overrides: dict | 
 def compare_budgets(items: list[dict], budget_a: float, budget_b: float) -> dict:
     a, b = purchase_plan(items, budget_a), purchase_plan(items, budget_b)
     covered = lambda p: {l["sku"] for l in p["lines"] if l["buy_qty"] > 0}
+    keys = ("budget", "total_spend", "remaining_budget", "units_bought", "units_unfunded",
+            "fully_funded", "partially_funded")
     return {
         "kind": "budget",
-        "plan_a": {k: a[k] for k in ("budget", "total_spend", "remaining_budget", "units_bought",
-                                     "units_unfunded", "fully_funded", "partially_funded")},
-        "plan_b": {k: b[k] for k in ("budget", "total_spend", "remaining_budget", "units_bought",
-                                     "units_unfunded", "fully_funded", "partially_funded")},
+        "plan_a": {k: a[k] for k in keys},
+        "plan_b": {k: b[k] for k in keys},
         "additional_units": b["units_bought"] - a["units_bought"],
         "additional_spend": money(b["total_spend"] - a["total_spend"]),
         "newly_covered_products": sorted(covered(b) - covered(a)),
@@ -85,5 +80,4 @@ def compare_lead_time(items: list[dict], sku: str, new_lead_time: float) -> dict
         "after": {k: new[k] for k in keys},
         "extra_units": new["suggested_qty"] - base["suggested_qty"],
         "extra_cost": money(new["estimated_cost"] - base["estimated_cost"]),
-        "baseline_changed": False,
     }
