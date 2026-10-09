@@ -30,5 +30,14 @@ def test_multi_product_missing_cost_flagged_not_invented():
 
 def test_existing_product_marked_as_update():
     fake = FakeLLM(ExtractionResult(products=[ExtractedProduct(product_name="Product A", current_stock=5)]))
-    row = build_preview(extract("...", llm=fake), {"SKU-A"}, {"product a": "SKU-A"})[0]
+    row = build_preview(extract("...", llm=fake), {"SKU-A"}, {"product a": {"sku": "SKU-A"}})[0]
     assert row["sku"] == "SKU-A" and row["is_update"]
+
+
+def test_repeated_mentions_are_merged_not_dropped():
+    fake = FakeLLM(ExtractionResult(products=[
+        ExtractedProduct(product_name="Shampoo", current_stock=50, unit_cost=120),
+        ExtractedProduct(product_name="shampoo", avg_daily_demand=8, lead_time_days=6, unit_cost=999)]))
+    rows = build_preview(extract("...", llm=fake))
+    assert len(rows) == 1 and rows[0]["missing"] == []
+    assert (rows[0]["avg_daily_demand"], rows[0]["unit_cost"]) == (8, 120)  # the first stated value wins

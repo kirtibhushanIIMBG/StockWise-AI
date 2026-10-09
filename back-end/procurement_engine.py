@@ -42,7 +42,8 @@ def purchase_plan(items: list[dict], budget: float) -> dict:
         "units_unfunded": sum(l["unfunded_qty"] for l in lines),
         "lines": lines,
         "method": "Greedy by priority: stockouts, then critical, then other reorders, "
-                  "then lowest days of cover, then SKU. Full quantities first, partial if money runs short.",
+                  "then lowest days of cover, then most sales lost per day, then SKU. "
+                  "Full quantities first, partial if money runs short.",
     }
 
 

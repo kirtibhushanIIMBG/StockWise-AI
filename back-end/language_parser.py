@@ -39,25 +39,31 @@ def extract(text: str, llm=None) -> ExtractionResult:
 
 
 def build_preview(result: ExtractionResult, existing_skus: set | None = None,
-                  existing_names: dict | None = None) -> list[dict]:
-    """Turn extracted products into editable preview rows with missing fields flagged."""
-    existing_names = existing_names or {}
+                  existing: dict | None = None) -> list[dict]:
+    """Turn extracted products into editable preview rows with missing fields flagged.
+    existing: lower-case product name → saved item; an update keeps the saved values the text didn't mention."""
+    existing = existing or {}
     taken = set(existing_skus or set())
-    rows, seen_names = [], set()
-    for p in result.products:
+    merged = {}  # repeated mentions of a product become one row; the first stated value wins
+    for i, p in enumerate(result.products):
         d = p.model_dump()
-        name = (d.get("product_name") or "").strip()
-        if name.lower() in seen_names:  # de-duplicate repeated mentions
-            continue
-        seen_names.add(name.lower())
-        sku = existing_names.get(name.lower())
-        is_update = sku is not None
-        if not sku:
-            sku = make_sku(name or "ITEM", taken)
+        d["product_name"] = (d.get("product_name") or "").strip()
+        key = d["product_name"].lower() or i  # products without a name are never merged
+        if key in merged:
+            merged[key].update({k: v for k, v in d.items() if merged[key][k] is None})
+        else:
+            merged[key] = d
+    rows = []
+    for d in merged.values():
+        name = d["product_name"]
+        old = existing.get(name.lower())
+        if old:
+            d.update({k: old.get(k) for k, v in d.items() if v is None})
+        sku = old["sku"] if old else make_sku(name or "ITEM", taken)
         taken.add(sku)
         missing = [f for f in REQUIRED if d.get(f) is None or (f == "product_name" and not name)]
         rows.append({
-            **d, "sku": sku, "is_update": is_update,
+            **d, "sku": sku, "is_update": old is not None,
             "missing": missing, "missing_labels": [REQUIRED[f] for f in missing],
         })
     return rows

@@ -8,6 +8,7 @@ from langchain_core.tools import tool
 from explanation_engine import explain_product
 from inventory_engine import analyze_all, money, summarize
 from procurement_engine import compare_budgets, compare_lead_time, purchase_plan
+from schemas import MAX_BUDGET, MAX_VALUE
 
 SLIM = ("sku", "product_name", "status", "current_stock", "avg_daily_demand", "coverage_days",
         "lead_time_days", "needs_reorder", "suggested_qty", "estimated_cost")
@@ -79,7 +80,7 @@ def build_tools(get_items):
         items = get_items()
         if products:
             found = {p: _find(items, p) for p in products}
-            rows = analyze_all([f for f in found.values() if f])
+            rows = analyze_all(list({f["sku"]: f for f in found.values() if f}.values()))  # name + SKU = one product
             missing = [p for p, f in found.items() if not f]
         else:
             rows, missing = [r for r in analyze_all(items) if r["needs_reorder"]], []
@@ -90,7 +91,7 @@ def build_tools(get_items):
     @tool
     def create_purchase_plan(budget_inr: float) -> dict:
         """Allocate a purchasing budget (in rupees) across products by priority without exceeding it."""
-        if budget_inr < 0:
+        if not 0 <= budget_inr <= MAX_BUDGET:
             return {"error": "Budget must be zero or more."}
         p = purchase_plan(get_items(), budget_inr)
         p["lines"] = p["lines"][:15]
@@ -102,9 +103,10 @@ def build_tools(get_items):
         """What-if comparison. kind='budget' needs budget_a and budget_b (rupees).
         kind='lead_time' needs product and new_lead_time_days. Never changes saved data."""
         items = get_items()
-        if kind == "budget" and budget_a is not None and budget_b is not None and min(budget_a, budget_b) >= 0:
+        if kind == "budget" and budget_a is not None and budget_b is not None \
+                and 0 <= min(budget_a, budget_b) <= max(budget_a, budget_b) <= MAX_BUDGET:
             return compare_budgets(items, budget_a, budget_b)
-        if kind == "lead_time" and product and new_lead_time_days is not None and new_lead_time_days >= 0:
+        if kind == "lead_time" and product and new_lead_time_days is not None and 0 <= new_lead_time_days <= MAX_VALUE:
             item = _find(items, product)
             return compare_lead_time(items, item["sku"] if item else product, new_lead_time_days)
         return {"error": "Unsupported scenario or missing values."}

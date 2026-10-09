@@ -99,11 +99,11 @@ const Dashboard = {
 
   renderTable() {
     const rows = this.data.products.filter((p) => this.matches(p));
-    $("#health-table").innerHTML = `<thead><tr><th>Product</th><th class="num">Available</th><th class="num">Daily sales</th>
+    $("#health-table").innerHTML = `<thead><tr><th>Product</th><th class="num">On hand</th><th class="num">Daily sales</th>
       <th class="num">Days stock may last</th><th class="num">Supplier takes</th><th>Status</th><th>Recommended action</th></tr></thead><tbody>` +
       (rows.length ? rows.map((p) => `<tr>
         <td><span class="prod">${esc(p.product_name)}</span><span class="sub">${esc(p.sku)} · ${esc(p.category)}</span></td>
-        <td class="num">${num(p.current_stock)}${p.incoming_stock ? `<span class="sub">+${num(p.incoming_stock)} on the way</span>` : ""}</td>
+        <td class="num">${num(p.current_stock)}${p.backorders ? `<span class="sub">${num(p.backorders)} owed</span>` : ""}${p.incoming_stock ? `<span class="sub">+${num(p.incoming_stock)} on the way</span>` : ""}</td>
         <td class="num">${num(p.avg_daily_demand)}</td>
         <td class="num">${p.coverage_days == null ? "No sales" : num(p.coverage_days) + " days"}</td>
         <td class="num">${num(p.lead_time_days)} days</td>
@@ -175,7 +175,7 @@ const Dashboard = {
   renderPreview(rows) {
     const cols = [["product_name", "Product", "text"], ["current_stock", "Units in stock", "number"], ["avg_daily_demand", "Daily sales", "number"],
       ["lead_time_days", "Delivery days", "number"], ["unit_cost", "Cost per unit (₹)", "number"], ["safety_stock", "Extra buffer units", "number"],
-      ["incoming_stock", "On the way", "number"]];
+      ["incoming_stock", "On the way", "number"], ["backorders", "Owed to customers", "number"]];
     $("#preview-table").innerHTML = `<thead><tr>${cols.map((c) => `<th>${c[1]}</th>`).join("")}<th>Note</th></tr></thead><tbody>` +
       rows.map((r, i) => `<tr data-i="${i}" data-sku="${esc(r.sku)}">${cols.map(([k, label, t]) =>
         `<td><input type="${t}" min="0" data-k="${k}" aria-label="${label}" value="${esc(r[k] ?? "")}" class="${r.missing.includes(k) ? "missing" : ""}" placeholder="${r.missing.includes(k) ? "needed" : ""}"></td>`).join("")}
@@ -207,6 +207,7 @@ function md(text) {
       while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]);
       const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
       const body = rows.filter((r) => !/^\s*\|[\s:|-]+\|\s*$/.test(r));
+      if (!body.length) continue;  // only divider lines: nothing to show
       html += "<table><thead><tr>" + cells(body[0]).map((c) => `<th>${c}</th>`).join("") + "</tr></thead><tbody>" +
         body.slice(1).map((r) => "<tr>" + cells(r).map((c) => `<td>${c}</td>`).join("") + "</tr>").join("") + "</tbody></table>";
       continue;

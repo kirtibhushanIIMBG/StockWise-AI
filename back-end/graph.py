@@ -98,6 +98,8 @@ def guard(state: AskState, runtime: Runtime[Ctx]) -> dict:
 
 def call_agent(state: AskState, runtime: Runtime[Ctx]) -> dict:
     history = state["messages"][-config.AGENT_MEMORY_MESSAGES:]
+    while history[0].type != "human":  # never start with an answer whose question was cut off
+        history = history[1:]
     res = agent_mod.run_agent(history, runtime.context.get_items, runtime.context.model)
     return {"draft": res["answer"], "evidence": res["tool_outputs"], "tools_used": res["tools_used"]}
 
@@ -183,7 +185,7 @@ def _vague_message(text: str, items: list[dict]) -> str:
 def extract(state: EntryState, runtime: Runtime[Ctx]) -> dict:
     items = runtime.context.get_items()
     result = lp.extract(state["text"], llm=runtime.context.model)
-    rows = lp.build_preview(result, {i["sku"] for i in items}, {i["product_name"].lower(): i["sku"] for i in items})
+    rows = lp.build_preview(result, {i["sku"] for i in items}, {i["product_name"].lower(): i for i in items})
     if not rows:
         return {"rows": [], "status": "empty", "message": _vague_message(state["text"], items)}
     return {"rows": rows, "errors": []}
@@ -197,9 +199,12 @@ def review(state: EntryState) -> dict:
     return {"decision": decision}
 
 
-def validate(state: EntryState) -> dict:
+def validate(state: EntryState, runtime: Runtime[Ctx]) -> dict:
     d = state["decision"]
-    rows = [{k: v for k, v in r.items() if k in EDITABLE} for r in d.get("items") or []]
+    # An update starts from the saved item, so fields the preview doesn't show (price, supplier…) survive.
+    saved = {i["sku"]: i for i in runtime.context.get_items()}
+    rows = [{**saved.get(str(r.get("sku")), {}), **{k: v for k, v in r.items() if k in EDITABLE}}
+            for r in d.get("items") or []]
     errors = [f"Please enter extra buffer units for {r.get('product_name') or 'each product'}, or accept the default buffer."
               for r in rows if r.get("safety_stock") in (None, "") and not d.get("apply_default_buffer", True)]
     items, problems = validate_records(rows) if rows else ([], ["There are no products to save."])

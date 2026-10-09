@@ -41,3 +41,9 @@ def test_tool_output_stays_small_for_large_inventories():
     assert len(json.dumps(risks)) < 20_000
     rep = tools["calculate_replenishment"].invoke({})
     assert rep["items"]["count"] == 2000 and len(rep["items"]["products"]) == TOP and rep["total_cost"] > 0
+
+
+def test_same_product_by_name_and_sku_is_counted_once():
+    from tools import build_tools
+    rep = {t.name: t for t in build_tools(lambda: [A])}["calculate_replenishment"].invoke({"products": ["Product A", "A"]})
+    assert rep["items"]["count"] == 1 and rep["total_cost"] == 11000

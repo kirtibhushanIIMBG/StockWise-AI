@@ -89,6 +89,16 @@ def test_ask_graph_remembers_conversation_per_thread():
     assert len(fresh["messages"]) == 2  # another thread (session) does not see this conversation
 
 
+
+def test_ask_graph_history_never_starts_with_an_orphaned_answer(monkeypatch):
+    seen = []
+    monkeypatch.setattr(graph.agent_mod, "run_agent", lambda msgs, *a: seen.append([m.type for m in msgs])
+                        or {"answer": "Done.", "tools_used": [], "tool_outputs": []})
+    cfg = tid()
+    for q in ("One?", "Two?", "Three?", "Four?"):
+        graph.ASK_GRAPH.invoke({"question": q}, cfg, context=graph.Ctx(lambda: [A]))
+    assert all(types[0] == "human" for types in seen) and len(seen[-1]) == 5
+
 # ---------------------------------------------------------------- entry graph (human-in-the-loop)
 SHAMPOO = ExtractionResult(products=[ExtractedProduct(
     product_name="Shampoo", current_stock=50, avg_daily_demand=8, lead_time_days=6, unit_cost=120)])
@@ -133,3 +143,14 @@ def test_entry_graph_vague_text_asks_for_details():
                                    context=entry_ctx([], ExtractionResult(products=[])))
     assert graph.pending_review(out) is None and out["status"] == "empty"
     assert "units in stock" in out["message"] and "Product A" in out["message"]
+
+
+def test_entry_graph_update_keeps_saved_values():
+    saved, cfg = [], tid()
+    ctx = graph.Ctx(get_items=lambda: [{**A, "supplier": "Acme", "selling_price": 150}], save_items=saved.extend,
+                    model=FakeExtractor(ExtractionResult(products=[ExtractedProduct(product_name="Product A", current_stock=5)])))
+    rows = graph.pending_review(graph.ENTRY_GRAPH.invoke({"text": "Product A now has 5 units"}, cfg, context=ctx))["rows"]
+    assert rows[0]["is_update"] and rows[0]["missing"] == []  # saved values fill what the text didn't mention
+    graph.ENTRY_GRAPH.invoke(Command(resume={"action": "save", "items": rows, "apply_default_buffer": True}), cfg, context=ctx)
+    s = saved[0]
+    assert (s["current_stock"], s["unit_cost"], s["supplier"], s["selling_price"]) == (5, 100, "Acme", 150)

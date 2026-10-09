@@ -109,3 +109,42 @@ def test_retail_forecasting_style_file_through_the_api():
     p = ok["products"][0]
     assert ok["loaded"] == 1 and p["sku"] == "P0001" and p["current_stock"] == 204 and p["avg_daily_demand"] == 138.5
     assert any("sales history" in n for n in ok["notes"])
+
+
+def test_lead_time_in_weeks_counted_once_and_point_decimals():
+    items, _, _ = parse_csv(b"product,stock,daily sales,lead time (weeks),cost\nA,10,.5,2 weeks,Rs.50\n")
+    a = items[0]
+    assert (a["lead_time_days"], a["avg_daily_demand"], a["unit_cost"]) == (14, 0.5, 50)
+
+
+def test_typed_sales_value_uses_the_chosen_period():
+    items, _, notes = parse_csv(b"product,stock,lead time,cost\nA,10,5,20\n", {}, {"avg_daily_demand": 70}, 7)
+    assert items[0]["avg_daily_demand"] == 10 and any("10 for every product" in n for n in notes)
+
+
+def test_absurd_number_is_skipped_and_the_session_keeps_working():
+    c = TestClient(main.app)
+    f = b"product,stock,daily sales,lead time,cost\nA," + b"9" * 400 + b",1,5,20\nB,10,1,5,20\n"
+    r = c.post("/api/upload", files={"file": ("x.csv", io.BytesIO(f), "text/csv")}).json()
+    assert r["loaded"] == 1 and "Row 1" in r["warnings"][0]
+    assert c.get("/api/inventory").status_code == 200
+
+
+def test_min_and_max_stock_levels_read_but_not_order_sizes():
+    f = (b"Item,Qty on Hand,Daily Sales,Max Daily Sales,Lead Time,Cost,Reorder Level,Max Stock,Min Order Qty\n"
+         b"Widget,40,10,25,5,100,80,150,500\n")
+    i = parse_csv(f)[0][0]
+    assert (i["avg_daily_demand"], i["min_stock"], i["max_stock"]) == (10, 80, 150)
+
+
+def test_sales_history_with_timestamps_counts_whole_days():
+    rows = "".join(f"2024-01-0{d} {h}:15,P1,Pen,5,100,3,10\n" for d in (1, 2, 3, 4) for h in (9, 14))
+    items, _, _ = parse_csv(("date,sku,product_name,units_sold,stock,lead_time,unit_cost\n" + rows).encode())
+    assert items[0]["avg_daily_demand"] == 10  # both sales each day, not only the 09:15 ones
+
+
+def test_peak_sales_column_and_negative_leading_decimal_are_not_misread():
+    f = "Product,Stock,Maximum Daily Sales,Avg Daily Sales,Lead Time,Cost\nPen,10,9,3,4,5\nInk,-.5,9,3,4,5\n"
+    items, warnings, _ = parse_csv(f.encode())
+    assert [i["avg_daily_demand"] for i in items] == [3]  # the average, not the peak
+    assert "Row 2" in warnings[0]  # "-.5" stays negative, so the row is rejected instead of read as 0.5

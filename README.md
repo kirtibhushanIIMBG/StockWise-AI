@@ -84,8 +84,10 @@ stockwise-ai/
      | `Lead Time (weeks)` | lead time in days (× 7) |
      | `Vendor` | supplier |
      | `std_daily_demand` | sales variability |
+     | `Reorder Level`, `Min Stock`, `reorder_point` | minimum stock level |
+     | `Max Stock`, `Maximum Stock` | maximum stock level |
 
-     Holding and reorder costs are never taken as the unit cost, and text columns are never read as numbers.
+     Holding and reorder costs are never taken as the unit cost, order sizes such as `Min Order Qty` are never taken as stock levels, peak or maximum sales are never taken as average sales, and text columns are never read as numbers.
    - **File shapes.**
      - One row per product.
      - One row per product per warehouse: stock and sales are added up.
@@ -108,27 +110,29 @@ stockwise-ai/
 | Metric | Formula |
 |---|---|
 | Inventory position ("stock available and expected") | current + incoming − backorders |
-| Coverage ("days stock may last") | current ÷ avg daily demand (zero demand → "no sales") |
+| Available stock | current − backorders (units already owed to customers are not available to sell) |
+| Coverage ("days stock may last") | available ÷ avg daily demand (zero demand → "no sales") |
 | Safety stock | supplied value → else `ceil(Z·σ·√LT)` with Z = 1.65 (~95%) → else **default buffer of 2 days of demand (disclosed as an assumption)** |
-| Reorder point | ceil(demand × lead time + safety stock) |
-| Target stock | ceil(demand × (lead time + review period 7 d) + safety stock) |
-| Reorder? | position ≤ reorder point **and** (demand > 0 or backorders > 0) |
+| Reorder point | ceil(demand × lead time + safety stock), raised to the file's **minimum stock level** (e.g. `Reorder Level`) if it has one |
+| Target stock | ceil(demand × (lead time + review period 7 d) + safety stock), at least the reorder point; capped at the file's **maximum stock level** if it has one, but never below the reorder point |
+| Reorder? | position ≤ reorder point **and** (demand > 0 or backorders > 0) **and** the label is not Low Demand **and** at least one unit to order |
 | Suggested qty | ceil(target − position), whole units ≥ 0 |
+| Next order due | floor((position − reorder point) ÷ demand) days, shown for products that need no order yet |
 | Cost | qty × unit cost (Decimal, rounded to paise) |
 
 **Risk label priority (first match wins):**
-1. Out of Stock
+1. Out of Stock (nothing available to sell, and there is demand or customers are still owed units)
 2. Low Demand (≤ 0.5/day)
-3. Critical (coverage < lead time, or stock < safety stock)
+3. Critical (coverage < lead time, or available stock < safety stock)
 4. Order Soon (position ≤ reorder point)
 5. Excess Stock (coverage > 60 days)
 6. Healthy
 
-The *needs reorder* flag is kept separate from the label.
+Low Demand products are never reordered: their sales are too slow to justify new stock, so they stay out of the purchase plan. A product with slow sales that is completely out of stock is labelled Out of Stock (rule 1) and is still reordered.
 
 ## Procurement allocation method (`procurement_engine.py`)
 This is a transparent **greedy** method, not a global optimum.
-- **Ranking:** stockouts → critical → other reorders → fewer days of cover → SKU (tie-breaker).
+- **Ranking:** stockouts → critical → other reorders → fewer days of cover → more sales lost per day (demand × selling price, or × unit cost when no price is given) → SKU (tie-breaker).
 - **Funding:** each product gets its full quantity if the budget allows; otherwise it gets as many whole units as the remaining budget can buy. Unfunded units are reported separately.
 - **Budget guarantee:** an assertion ensures spending never exceeds the budget.
 - **Scenarios:** compare two budgets, or recalculate one product with a new lead time **on a copy**, so the saved data never changes.
@@ -265,11 +269,11 @@ Without a key, the dashboard, upload, planner, scenarios and export all still wo
 
 ## Tests
 ```bash
-cd back-end && ~/.venvs/stockwise/bin/python -m pytest -q tests     # 52 passed
+cd back-end && ~/.venvs/stockwise/bin/python -m pytest -q tests     # 73 passed
 ```
 | File | Covers |
 |---|---|
-| `test_inventory.py`, `test_procurement.py` | Demonstration scenarios 1–4 and 7 with exact expected numbers; zero demand; default/statistical safety stock; excess stock; incoming/backorders; deterministic priority; strict budget enforcement across many budgets; partial allocation; budget comparison; tool output staying small for 2,000 products |
+| `test_inventory.py`, `test_procurement.py` | Demonstration scenarios 1–4 and 7 with exact expected numbers; zero demand; default/statistical safety stock; excess stock; incoming stock; backorders reducing available stock; minimum/maximum stock levels; next order due; deterministic priority and sales-value tie-break; strict budget enforcement across many budgets; partial allocation; budget comparison; tool output staying small for 2,000 products |
 | `test_csv_formats.py` | One deliberately different CSV per case: semicolon + BOM + decimal commas; tab-separated Windows-encoded file with title lines; weekly sales and lead time in weeks; sales history across stores; per-warehouse file; analytics export with text columns; messy numbers; codes without names; Excel file; a missing column (asked for, never guessed); retail-forecasting-style dataset through the API |
 | `test_language_parser.py` | Plain-English extraction with a **mocked** model: Scenario 5, missing-value flagging, de-duplication, update detection |
 | `test_graph.py` | Number grounding. Ask workflow: verified answer, a 3-tool question under the production limits, rewrite of an invented figure, visible note when a figure stays unverified, empty-inventory guard, per-session chat memory. Entry workflow: pause at review with nothing saved, save after confirmation, cancel, invalid edit looping back to review, vague text |
@@ -279,7 +283,7 @@ Unit tests never call a live model: `conftest.py` blanks any real key.
 
 | Category | Status |
 |---|---|
-| Automated tests (deterministic + mocked model) | ✅ 52/52 passed |
+| Automated tests (deterministic + mocked model) | ✅ 73/73 passed |
 | Real CSV files | ✅ A 2,000-product inventory (0.1 s) and the reference repo's three CSVs, including its 10 MB / 109,400-row sales history (under 1 s, matching its own processed figures). The full upload → "Help us read your file" → analysis flow was checked in a real browser |
 | Live AI via OpenRouter, `openrouter/free` (2026-10-09) | ✅ Multi-tool question; follow-up using chat memory; lead time 5→8 days (Scenario 7); Shampoo extraction + confirm (Scenario 5); vague text with every figure flagged missing and none invented (Scenario 6); a question over the 2,000-product file. All chat answers passed the number check |
 | Live AI via OpenRouter, `anthropic/claude-sonnet-5.5` | ✅ Two multi-tool questions with verified figures; the remaining checks stopped when the account ran out of credit |
@@ -287,7 +291,8 @@ Unit tests never call a live model: `conftest.py` blanks any real key.
 ## Limitations
 - Session data is in memory only and is lost on server restart. There is no login or database.
 - Demand is a single average with no seasonality or forecasting model.
-- Budget allocation is greedy, not optimal. Minimum order quantities and supplier discounts are not modelled.
+- Budget allocation is greedy, not optimal. Minimum order quantities, pack sizes and supplier discounts are not modelled.
+- Stock value and excess value use the current unit cost (what it would cost to buy again), not an accounting valuation such as FIFO or moving average.
 - Warehouses are added together; recommendations are per product, not per warehouse.
 - Files up to 25 MB and 5,000 products. Excel files must be saved as CSV. In semicolon-separated files, a number like `1.200` with no decimal comma is read as 1.2.
 - Free models vary by request. Answers are checked, but they follow the answer format less strictly than Claude and can take 10–60 s.
@@ -303,5 +308,11 @@ Unit tests never call a live model: `conftest.py` blanks any real key.
 
 ## References and attribution
 - Concept references: [smart-inventory-replenishment-dashboard](https://github.com/Shajidp/smart-inventory-replenishment-dashboard) (inventory analytics, reorder point and safety-stock ideas; its CSVs were used as real-world test files) and [Inventra](https://github.com/Balaastratech/Inventra) (agentic tool orchestration and structured responses). **No code was copied from either repository.** All code here is original, and the formulas are standard textbook operations-management methods.
+- Engine refinements were checked against these repositories, again **as concepts only (no code copied)**:
+  - [InvenTree](https://github.com/inventree/InvenTree): stock owed to customers is not available stock; per-product minimum and maximum stock levels.
+  - [agentic-inventory-management](https://github.com/Jagannath-K/agentic-inventory-management): honouring a file's own reorder point and maximum stock; days until the next order (its stock file was used as a real-world test file).
+  - [ai-inventory-forecasting-business-applications](https://github.com/hyunnjjung/ai-inventory-forecasting-business-applications): revenue-aware priority, used here only as the tie-break between equally urgent products.
+  - [Frappe Books](https://github.com/frappe/books): stock valuation methods (FIFO, moving average), which led to the valuation note under Limitations.
+  - [Inventory-Management-System](https://github.com/jonathanrao99/Inventory-Management-System), [Inventory-Management-Using-GenAI](https://github.com/Mukku27/Inventory-Management-Using-GenAI) and [inventory-optimization-ai](https://github.com/AdamJChen/inventory-optimization-ai) were reviewed; their fixed low-stock thresholds, EOQ with assumed ordering and holding costs, and ML or reinforcement-learning forecasting were **not adopted**, because StockWise never assumes costs and forecasting is a future improvement.
 - [LangChain](https://docs.langchain.com/oss/python/langchain/overview), [LangGraph](https://docs.langchain.com/oss/python/langgraph/overview), [Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview), [LangChain agents](https://docs.langchain.com/oss/python/langchain/agents), [langchain-openrouter](https://docs.langchain.com/oss/python/integrations/chat/openrouter), [langchain-anthropic](https://docs.langchain.com/oss/python/integrations/chat/anthropic), [OpenRouter limits](https://openrouter.ai/docs/api-reference/limits), [FastAPI](https://fastapi.tiangolo.com/).
 - The sample dataset is **synthetic demonstration data**.

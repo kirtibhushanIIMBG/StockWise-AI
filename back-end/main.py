@@ -9,6 +9,7 @@ import logging
 import uuid
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from langgraph.types import Command
@@ -19,7 +20,7 @@ from data_processing import REQUIRED, DataError, NeedsInput, load_csv_path, pars
 from explanation_engine import explain_plan, explain_product
 from inventory_engine import analyze_all, summarize
 from procurement_engine import compare_budgets, compare_lead_time, purchase_plan
-from schemas import AskRequest, ConfirmRequest, ParseRequest, PurchasePlanRequest, ScenarioRequest
+from schemas import MAX_BUDGET, AskRequest, ConfirmRequest, ParseRequest, PurchasePlanRequest, ScenarioRequest
 from session_store import store
 
 logging.basicConfig(level=logging.INFO)
@@ -49,6 +50,12 @@ def err(msg: str, code: int = 400, **extra):
     return JSONResponse({"ok": False, "message": msg, **extra}, status_code=code)
 
 
+@app.exception_handler(RequestValidationError)
+async def invalid_request(request: Request, exc: RequestValidationError):
+    # FastAPI's default reply echoes the input, which crashes on values like a 1e999 budget (infinity).
+    return err("Please check what you entered: a value is missing, too long or out of range.", 422)
+
+
 def inventory_payload(sid: str) -> dict:
     rows = analyze_all(store.get_items(sid))
     for r in rows:
@@ -66,8 +73,7 @@ def inventory(request: Request):
     return inventory_payload(request.state.sid)
 
 
-@app.post("/api/sample")
-@app.get("/api/sample")
+@app.post("/api/sample")  # POST only: opening a link must never wipe the user's inventory
 def load_sample(request: Request):
     store.set_items(request.state.sid, load_csv_path(config.SAMPLE_CSV), "sample")
     return inventory_payload(request.state.sid)
@@ -83,12 +89,12 @@ async def upload(request: Request, file: UploadFile = File(...), mapping: str = 
                  defaults: str = Form("{}"), demand_period: float = Form(1)):
     """mapping {field: column header} and defaults {field: number} come from the "help us read
     your file" form, shown when a required column can't be found automatically."""
-    content = await file.read()
+    content = await file.read(25_000_001)  # never pull a huge upload into memory
     if len(content) > 25_000_000:
         return err("This file is too large. Please upload a file under 25 MB.")
     try:
         mapping, defaults = json.loads(mapping), json.loads(defaults)
-        if not (isinstance(mapping, dict) and isinstance(defaults, dict)) or demand_period <= 0:
+        if not (isinstance(mapping, dict) and isinstance(defaults, dict)) or not 0 < demand_period <= 365:  # also NaN/inf
             raise ValueError
         defaults = {k: float(v) for k, v in defaults.items()}
         if any(v < 0 for v in defaults.values()):
@@ -198,8 +204,9 @@ def ask(request: Request, body: AskRequest):
 
 @app.get("/api/export")
 def export(request: Request, budget: float | None = None):
-    # No (or invalid) budget = export everything recommended.
-    p = purchase_plan(store.get_items(request.state.sid), budget if budget is not None and budget >= 0 else 1e15)
+    # No, invalid or out-of-range budget (e.g. "inf") = export everything recommended.
+    ok = budget is not None and 0 <= budget <= MAX_BUDGET
+    p = purchase_plan(store.get_items(request.state.sid), budget if ok else MAX_BUDGET)
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Priority", "SKU", "Product", "Category", "Stock Status", "Recommended Units",

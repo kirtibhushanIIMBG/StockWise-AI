@@ -147,3 +147,18 @@ def test_model_provider_switch(monkeypatch):
     monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-test")
     assert type(agent_mod.get_model()).__name__ == "ChatAnthropic"
+
+
+def test_out_of_range_numbers_are_rejected_not_crashing():
+    c = client()
+    r = c.post("/api/purchase-plan", content=b'{"budget": 1e999}', headers={"content-type": "application/json"})
+    assert r.status_code == 422
+    assert c.get("/api/export?budget=inf").status_code == 200  # treated as "buy everything"
+    assert c.post("/api/scenario", json={"kind": "lead_time", "sku": "SKU-A", "new_lead_time": 1e308}).status_code == 422
+
+
+def test_opening_the_sample_url_does_not_wipe_uploaded_data():
+    c = client()
+    c.post("/api/upload", files={"file": ("inv.csv", io.BytesIO(GOOD), "text/csv")})
+    c.get("/api/sample")  # a link or prefetch; loading demo data needs a POST
+    assert c.get("/api/inventory").json()["source"] == "upload"

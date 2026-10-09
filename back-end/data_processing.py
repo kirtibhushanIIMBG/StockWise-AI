@@ -29,17 +29,19 @@ REQUIRED = {
 OPTIONAL = {
     "sku": "product code", "category": "category", "supplier": "supplier", "selling_price": "selling price",
     "safety_stock": "safety buffer", "demand_std": "sales variability", "incoming_stock": "stock on the way",
-    "backorders": "unfilled orders",
+    "backorders": "unfilled orders", "min_stock": "minimum stock level", "max_stock": "maximum stock level",
 }
 NUMERIC = {"current_stock", "avg_daily_demand", "lead_time_days", "unit_cost", "selling_price", "safety_stock",
-           "demand_std", "incoming_stock", "backorders"}
-SUMMED = {"current_stock", "incoming_stock", "backorders", "safety_stock"}  # added up across locations
+           "demand_std", "incoming_stock", "backorders", "min_stock", "max_stock"}
+SUMMED = {"current_stock", "incoming_stock", "backorders", "safety_stock", "min_stock", "max_stock"}  # across locations
 EXACT = {**{f: f for f in (*REQUIRED, *OPTIONAL)},
          "product": "product_name", "name": "product_name", "item": "product_name",
          "stock": "current_stock", "on_hand": "current_stock", "quantity": "current_stock",
          "daily_demand": "avg_daily_demand", "demand": "avg_daily_demand", "daily_sales": "avg_daily_demand",
          "lead_time": "lead_time_days", "cost": "unit_cost", "purchase_cost": "unit_cost",
-         "price": "selling_price", "incoming": "incoming_stock", "sku_id": "sku", "product_id": "sku"}
+         "price": "selling_price", "incoming": "incoming_stock", "sku_id": "sku", "product_id": "sku",
+         "reorder_level": "min_stock", "reorder_point": "min_stock", "rop": "min_stock", "minimum_stock": "min_stock",
+         "maximum_stock": "max_stock"}
 MAX_PRODUCTS = 5000
 SHOWN_WARNINGS = 5
 
@@ -154,8 +156,15 @@ def _rule(col: str) -> tuple[str | None, float]:
     if has("price", "mrp", "msrp", "retail", "rrp", "selling"):
         return "selling_price", 1
     if has("demand", "sales", "sold", "usage", "consumption", "velocity", "offtake") \
-            and not has("revenue", "value", "amount", "forecast", "rank", "growth", "pct", "percent", "trend"):
+            and not has("revenue", "value", "amount", "forecast", "rank", "growth", "pct", "percent", "trend",
+                        "min", "max", "minimum", "maximum", "peak"):
         return "avg_daily_demand", _per_day(col, t)
+    level = has("stock", "level", "qty", "quantity", "inventory", "units") and not has(
+        "order", "days", "cover", "value", "cost")  # "Min Order Qty" is not a stock level
+    if level and (has("min", "minimum") or (has("reorder", "rop") and has("level", "point"))):
+        return "min_stock", 1
+    if level and has("max", "maximum"):
+        return "max_stock", 1
     if (has("stock", "inventory", "onhand", "soh", "available", "balance", "closing") or "on_hand" in col
             or col in ("qty", "quantity", "units")) and not has(
             "value", "days", "cover", "coverage", "turn", "turnover", "status", "min", "max", "reorder", "risk", "age",
@@ -208,7 +217,8 @@ def _numbers(s: pd.Series, decimal_comma: bool) -> pd.Series:
         raw = raw.where(~has_comma, raw.str.replace(".", "", regex=False).str.replace(",", ".", regex=False))
     else:  # ₹1,20,889 / 1,200 → thousands separators
         raw = raw.str.replace(",", "", regex=False)
-    return pd.to_numeric(raw.str.extract(r"(-?\d+(?:\.\d+)?)", expand=False), errors="coerce")
+    # ".5" is 0.5 (database exports write it that way), "-.5" stays negative, but "Rs.50" is still 50
+    return pd.to_numeric(raw.str.extract(r"(-?\d+(?:\.\d+)?|(?<![a-z])-?\.\d+)", expand=False), errors="coerce")
 
 
 def _dates(s: pd.Series) -> pd.Series:
@@ -231,6 +241,7 @@ def _scale_note(field: str, scale: float) -> str:
 def _from_history(df: pd.DataFrame, key: str, notes: list[str]) -> pd.DataFrame:
     """Dated rows (per product, maybe per location) → one row per product."""
     df = df.dropna(subset=["date"]).sort_values("date")
+    df["date"] = df["date"].dt.normalize()  # timestamps ("2024-01-01 09:15") → whole days
     first, last = df["date"].min(), df["date"].max()
     days = (last - first).days + 1
     by_loc = [key, "location"] if "location" in df else [key]
@@ -299,10 +310,10 @@ def parse_csv(content: bytes, mapping: dict | None = None, defaults: dict | None
         if field == "date":
             df[field] = _dates(col)
         elif field in NUMERIC:
-            num = _numbers(col, decimal_comma)
-            if field == "lead_time_days":  # "2 weeks" written in the cells
-                num = num.where(~col.astype("string").str.contains("week|wk", case=False, na=False), num * 7)
-            df[field] = num * scale
+            num, cell_scale = _numbers(col, decimal_comma), scale
+            if field == "lead_time_days":  # "2 weeks" written in a cell is in weeks, whatever the header says
+                cell_scale = np.where(col.astype("string").str.contains("week|wk", case=False, na=False), 7, scale)
+            df[field] = num * cell_scale
         else:
             df[field] = col
         if how != "exact" and field in {*REQUIRED, *OPTIONAL}:
@@ -326,6 +337,8 @@ def parse_csv(content: bytes, mapping: dict | None = None, defaults: dict | None
             notes.append(f"We assumed “{headers[i]}” is sales per day.")
     for field, value in defaults.items():
         if field not in fields:
+            if field == "avg_daily_demand":
+                value /= demand_period  # the form's "per week" / "per month" applies to a typed value too
             df[field] = value
             notes.append(f"{REQUIRED[field].capitalize()}: {value:g} for every product (entered by you).")
 

@@ -167,7 +167,7 @@ input[type=number] { font-family: var(--f-mono); font-variant-numeric: tabular-n
 .opt-head h3 { margin-bottom: .15rem; }
 .opt-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--brand-soft); color: var(--brand); flex: none; }
 .drop { display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: 1.4rem 1rem; border: 1.5px dashed var(--line); border-radius: var(--r); cursor: pointer; color: var(--slate); text-align: center; transition: border-color .15s, background .15s; }
-.drop:hover { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+.drop:hover, .drop.over { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
 .drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .drop:focus-within { border-color: var(--brand); }
 .drop span { font-weight: 600; color: var(--ink); }

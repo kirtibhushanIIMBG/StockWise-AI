@@ -49,6 +49,16 @@ async function init() {
 
   $("#see-risk").onclick = () => Dashboard.showUrgent();
   $("#file-input").onchange = (e) => $("#file-label").textContent = e.target.files[0]?.name || "Choose a CSV file…";
+  // "or drop it here": without these handlers the browser opens the dropped file and leaves the app.
+  const drop = $(".drop");
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = (e) => {
+    e.preventDefault(); drop.classList.remove("over");
+    if (!e.dataTransfer.files.length) return;
+    $("#file-input").files = e.dataTransfer.files;
+    $("#file-label").textContent = e.dataTransfer.files[0].name;
+  };
 
   $("#btn-upload").onclick = (ev) => uploadFile(ev.target);
   $("#btn-mapping").onclick = (ev) => {
@@ -64,7 +74,8 @@ async function init() {
   $("#btn-mapping-cancel").onclick = () => { $("#mapping").hidden = true; showMsg("Nothing was changed."); };
 
   $("#btn-sample").onclick = async () => {
-    const d = await API.sample(); Dashboard.render(d); refreshPlan(); showMsg("Demo data loaded.");
+    try { const d = await API.sample(); Dashboard.render(d); refreshPlan(); showMsg("Demo data loaded."); }
+    catch (e) { showMsg(e.message, false); }
   };
 
   $("#btn-parse").onclick = async (ev) => {
